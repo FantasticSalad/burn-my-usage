@@ -1,0 +1,20 @@
+{
+  "name": "burn-my-usage",
+  "displayName": "Burn My Usage",
+  "version": "0.2.4",
+  "description": "Unattended repository work in isolated worktrees, with staged leak checks, recoverable branches and a local decision inbox. Claude Code only.",
+  "author": {
+    "name": "James Bullen"
+  },
+  "repository": "https://github.com/FantasticSalad/burn-my-usage",
+  "license": "MIT",
+  "keywords": [
+    "automation",
+    "unattended",
+    "usage",
+    "code-review",
+    "git",
+    "weekly"
+  ],
+  "homepage": "https://github.com/FantasticSalad/burn-my-usage"
+}

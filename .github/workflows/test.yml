@@ -1,0 +1,32 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS runs the system bash 3.2, the oldest the scripts support. Windows runs Git Bash.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: use the system bash 3.2 on macOS, not Homebrew's
+        if: runner.os == 'macOS'
+        run: echo /bin >> "$GITHUB_PATH"
+      - name: bash version
+        shell: bash
+        run: bash --version | head -n 1
+      - name: tests
+        shell: bash
+        run: bash tests/run-all.sh
+      - name: trace guard cases after a failure
+        if: failure()
+        shell: bash
+        run: bash tests/trace-cases.sh

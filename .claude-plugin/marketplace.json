@@ -1,0 +1,15 @@
+{
+  "name": "burn-my-usage",
+  "owner": {
+    "name": "James Bullen"
+  },
+  "description": "Burn My Usage: an unattended end-of-week run that turns spare Claude Code usage into reviewed branches.",
+  "plugins": [
+    {
+      "name": "burn-my-usage",
+      "source": "./",
+      "description": "Turns your plan's spare weekly usage into review-ready branches and a short inbox of decisions, while you're away.",
+      "category": "productivity"
+    }
+  ]
+}
