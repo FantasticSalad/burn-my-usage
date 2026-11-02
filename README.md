@@ -232,10 +232,6 @@ the requested sites. Review project scripts before running them: children are ou
 string-level enforcement. There is no plugin telemetry or model API client. Authentication
 stays inside approved git/gh/Claude clients.
 
-See [docs/RELEASE.md](docs/RELEASE.md) for actual evidence and gates still open.
-
 The [guard preparation review](docs/GUARD-REVIEW.md) records reproduced gaps, fixes and
 remaining coverage limits. [Eval accounting](docs/EVAL-ACCOUNTING.md) explains the result
-gate. [Publication snapshots](docs/PUBLIC-SNAPSHOT.md) prepare a clean one-commit bundle
-without rewriting private history. [Independent testing](docs/INDEPENDENT-TEST.md) supplies
-the installation/task and human-review instructions and an empty result template.
+gate. The plugin has not yet had an independent security review.

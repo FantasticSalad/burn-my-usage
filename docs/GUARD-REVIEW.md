@@ -45,7 +45,7 @@ SECURITY.md for the accepted limits.
 
 The independent reviewer should repeat the synthetic regressions, examine the fixed
 branches, verify the artifact bytes and decide whether these limits fit the intended use.
-Actual test totals, CI and clean-task results belong in RELEASE.md.
+Actual test totals, CI and clean-task results are kept in the maintainer's release record.
 
 ## Second review (2026-10-29, 0.2.4)
 
