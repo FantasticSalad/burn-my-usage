@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings everywhere: a CRLF checkout on Windows breaks bash
+# ("$'\r': command not found"), which would leave the guard unable to run.
+* text=auto eol=lf
+*.png binary
