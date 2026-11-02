@@ -49,7 +49,7 @@ never adopted or changed without explicit approval.
 
 ## Remaining release work
 
-Actual check results and owner gates live in RELEASE.md. A clean history, privacy review,
+Actual check results and owner gates live in the maintainer's release record. A clean history, privacy review,
 model evals with a baseline, a clean installation/real task and an independent user's run
 are separate evidence. No directory submission or public release is implied by a passing
 unit suite. Cross-repository agent fan-out and scheduling are future work.

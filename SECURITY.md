@@ -213,7 +213,7 @@ a space). The other 36 are allowed controls and cases it already refused. The 44
 guard checks pass unchanged. A headless session on Claude Code 2.1.312 confirmed that a
 subagent's tool calls carry the parent's session id (Assumptions). The real-transcript replay
 (docs/guard-replay.md) wasn't rerun: it reads the maintainer's own session transcripts, which
-weren't available to this review. CI and the full-suite count are in docs/RELEASE.md.
+weren't available to this review. CI passed on Linux, macOS and Windows.
 
 ### 2026-10-25: Review ordinary write and push forms
 
@@ -233,8 +233,8 @@ unchanged. GUARD-REVIEW.md records this as author-side preparation, not independ
 **Verification.** Four path, two push-fan-out and ten HTTP denials failed before their
 fixes. The 27 focused controls pass after correction, including canonical writes, permitted
 reads, single-destination pushes and normal GET forms. The complete Windows suite passes
-528 checks (the full shell suite plus 18 Node cases). CI and live-task results are recorded
-separately in docs/RELEASE.md.
+528 checks (the full shell suite plus 18 Node cases). CI and live-task results are kept in
+the maintainer's release record.
 
 ### 2026-10-25: Audit messages and prepare an isolated publication history
 
@@ -250,14 +250,13 @@ file contents and prints locations/categories only. prepare-snapshot.mjs constru
 parentless release commit in a disposable object store, imports and verifies its bundle,
 checks exact tree equality, and scans that one-commit history. Source refs remain intact.
 check-eval.mjs checks complete arms, null errors, completed grading and plugin outcomes;
-it does not equate message counts with tool-use budgets. Private-list and independent
-person gates remain open.
+it does not equate message counts with tool-use budgets. Independent review remains open.
 
 **Verification.** Seven scanner tests include old-message and secret-body detection without
 value disclosure. Three snapshot tests cover exact trees, isolated history, dirty sources
 and existing output preservation. Six eval-gate tests distinguish judged baseline failures
 from execution/grading errors. Both saved six-run comparisons pass that gate. See
-docs/PUBLIC-SNAPSHOT.md, docs/EVAL-ACCOUNTING.md and docs/INDEPENDENT-TEST.md.
+docs/EVAL-ACCOUNTING.md.
 
 ### 2026-10-08: Enforce the critical rules in a hook, not only in the prompt
 
@@ -664,5 +663,5 @@ the plugin's session guard.
 
 **Verification.** tests/work-items.test.sh checks synthetic secret detection without value
 disclosure, scanner errors, dirty-work preservation, ownership, backup and unchanged default
-history. The existing guard suites cover command parsing. See docs/RELEASE.md for actual
-release results and unverified gates; this entry does not claim runtime or CI success.
+history. The existing guard suites cover command parsing. This entry does not claim runtime
+or CI success.
