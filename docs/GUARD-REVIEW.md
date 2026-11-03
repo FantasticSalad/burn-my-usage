@@ -1,10 +1,9 @@
-# Guard preparation review
+# Guard review
 
-This is an author-side preparation review of the 0.2.3 candidate. It does not satisfy the
-independent person's security-review gate. Review scope: the registered hook, session
-markers, path and shell dispatch, push checks, usage and staged-commit checks, plus the
-owned-worktree lifecycle. Only synthetic hook inputs and disposable repositories were used.
-Requested dangerous commands were never executed.
+This is the author's own review of version 0.2.3, not an independent security review. Review
+scope: the registered hook, session markers, path and shell dispatch, push checks, usage and
+staged-commit checks, plus the owned-worktree lifecycle. Only synthetic hook inputs and
+disposable repositories were used. Requested dangerous commands were never executed.
 
 ## Findings and corrections
 
@@ -31,7 +30,7 @@ make no GitHub calls. The network tests perform no HTTP requests.
 - Fresh usage is checked before selected mutations. This is pacing, not provider billing
   enforcement. Configure provider-side limits when a hard spend boundary is required.
 - Inbox checks prevent adding approval ticks; moving an existing tick remains a documented
-  weakness. Approval and exact-revision review remain the owner's responsibility.
+  weakness. Approval and exact-revision review remain the user's responsibility.
 
 ## Coverage limits
 
@@ -43,16 +42,15 @@ literal redirects. Normal processes and other sessions do not enter this hook's 
 Do not use this review as proof of sandboxing or complete unattended security. See
 SECURITY.md for the accepted limits.
 
-The independent reviewer should repeat the synthetic regressions, examine the fixed
-branches, verify the artifact bytes and decide whether these limits fit the intended use.
-Actual test totals, CI and clean-task results are kept in the maintainer's release record.
+An independent reviewer should repeat the synthetic regressions, examine the fixed branches
+and decide whether these limits fit the intended use.
 
 ## Second review (2026-10-29, 0.2.4)
 
 A second agent, not the one that wrote 0.2.3, read the whole guard and tried other spellings
 of each refused action, then confirmed each one with synthetic hook input and, where it
-depended on git or Windows, against real git 2.55 and NTFS. It is still author-side
-preparation, not the independent person's review.
+depended on git or Windows, against real git 2.55 and NTFS. The author ran this agent too, so
+it isn't an independent review either.
 
 | Finding | Example the 0.2.3 guard allowed | Correction |
 |---|---|---|

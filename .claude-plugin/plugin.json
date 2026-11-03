@@ -1,7 +1,7 @@
 {
   "name": "burn-my-usage",
   "displayName": "Burn My Usage",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Unattended repository work in isolated worktrees, with staged leak checks, recoverable branches and a local decision inbox. Claude Code only.",
   "author": {
     "name": "James Bullen"

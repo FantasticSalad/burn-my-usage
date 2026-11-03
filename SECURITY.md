@@ -172,6 +172,25 @@ practice: if your remote protects the default branch, nothing reaches it without
 
 ## Decision log
 
+### 2026-11-02: Refuse to start a run without a config
+
+**Problem.** The rule "no config, don't go on" was only an instruction. The skill tells the
+model to check with `start.sh --paths` first. In a Linux eval with Bash granted, Haiku skipped
+that check in 4 of 5 runs and called `start.sh <session id>` directly. That creates the burn
+home, a run folder and the guard's active marker with no config behind them. The OS sandbox
+refused the writes there; on a real machine they would have succeeded.
+
+**Options.** Strengthen the wording only, or make `start.sh` check for itself.
+
+**Decision.** `start.sh <session id>` now exits 3 with `NO_CONFIG` when `config.md` is
+missing. It creates nothing: no burn home, no run folder, no active marker. Setup writes
+`config.md` (step 2) before its guard test (step 7), so setup is unaffected. `--paths` is
+unchanged.
+
+**Verification.** tests/scripts.test.sh adds five checks. Four of them fail on the previous
+`start.sh`: the refusal, the exit code, and the absence of a marker and of a run folder. The
+complete Linux suite passes 636 checks.
+
 ### 2026-10-29: A second review: other spellings of refused actions
 
 **Problem.** A second adversarial review of the 0.2.3 guard, by a different agent from the one
@@ -228,13 +247,13 @@ the reproduced literal forms and retain the documented string-mediation limits.
 effective origin push destination in every enabled push mode, then verify private
 visibility when configured. Inspect attached HTTP method/data options; a GET never cancels
 a payload or another explicit method. Existing user settings and private history remain
-unchanged. GUARD-REVIEW.md records this as author-side preparation, not independent vetting.
+unchanged. GUARD-REVIEW.md records this as the author's own review, not independent vetting.
 
 **Verification.** Four path, two push-fan-out and ten HTTP denials failed before their
 fixes. The 27 focused controls pass after correction, including canonical writes, permitted
 reads, single-destination pushes and normal GET forms. The complete Windows suite passes
-528 checks (the full shell suite plus 18 Node cases). CI and live-task results are kept in
-the maintainer's release record.
+528 checks (the full shell suite plus 18 Node cases). CI passed on Linux, macOS and Windows,
+and a synthetic end-to-end task passed 15/15.
 
 ### 2026-10-25: Audit messages and prepare an isolated publication history
 

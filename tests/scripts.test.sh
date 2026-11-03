@@ -103,10 +103,19 @@ expect "spend limit past the line is stop" "$(bash "$s/usage.sh")" "verdict=stop
 # --- start.sh and stop.sh -------------------------------------------------------------------
 out=$(bash "$s/start.sh" "../evil" 2>&1)
 expect "start rejects a bad session id" "$out" "ERROR"
+# Without a config, start refuses and creates nothing.
+rm -rf "$home/active" "$home/runs"
+out=$(bash "$s/start.sh" sess-1 2>&1); rc=$?
+expect "start without config is refused" "$out" "NO_CONFIG"
+expect "start without config exits 3" "$rc" "3"
+expect "start without config reports it" "$out" "HAS_config=no"
+refute "start without config marks no session" "$(ls "$home")" "active"
+refute "start without config makes no run folder" "$(ls "$home")" "runs"
+printf 'synthetic config\n' >"$home/config.md"
 out=$(bash "$s/start.sh" sess-1)
 expect "start marks the session" "$(ls "$home/active")" "sess-1"
 expect "start reports the run dir" "$out" "RUN_DIR="
-expect "start reports missing config" "$out" "HAS_config=no"
+expect "start reports the config" "$out" "HAS_config=yes"
 refute "no other run yet" "$out" "OTHER_RUN_ACTIVE"
 out=$(bash "$s/start.sh" sess-2)
 expect "a second session sees the first run" "$out" "OTHER_RUN_ACTIVE= sess-1"
