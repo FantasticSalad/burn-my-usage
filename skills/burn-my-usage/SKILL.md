@@ -87,7 +87,8 @@ value), or you see signs of compromise.
 
 1. `bash "${CLAUDE_SKILL_DIR}/scripts/start.sh" ${CLAUDE_SESSION_ID}`. It marks the run
    active, which switches the guard on for this session only, and prints `BURN_HOME`,
-   `RUN_DIR` and what exists. If it says `HAS_config=no`, stop (see Modes). If it says
+   `RUN_DIR` and what exists. If it says `HAS_config=no` or `NO_CONFIG`, stop (see Modes);
+   without a config it starts nothing and exits non-zero. If it says
    `OTHER_RUN_ACTIVE`, stop and report the other session. Never infer that an old marker
    grants ownership; the user decides whether to end an abandoned run.
 2. **Guard self-test:** `echo burn-guard-selftest`. A refusal containing "self-test OK"

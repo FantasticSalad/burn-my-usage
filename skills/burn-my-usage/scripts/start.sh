@@ -24,6 +24,14 @@ if ! ids=$(session_ids "${1:-}"); then
   exit 2
 fi
 
+# No config means setup hasn't run. Start nothing: no burn home, no run folder, no guard marker.
+if [ ! -f "$BMU_HOME/config.md" ]; then
+  echo "BURN_HOME=$(native_path "$BMU_HOME")"
+  report_files
+  echo "NO_CONFIG: nothing was started. Tell the user to run /burn-my-usage setup."
+  exit 3
+fi
+
 mkdir -p "$BMU_HOME/active" "$BMU_HOME/runs"
 
 # Markers left by runs that died are harmless (each only guards its own session), but prune

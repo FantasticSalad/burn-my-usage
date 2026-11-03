@@ -45,7 +45,7 @@ the third read, and reported 3 turns. So the CLI cap counts tool-use rounds, and
 number counts the prompt plus each tool result, as the documented distinction says. The plugin
 eval runner's own `turns` field wasn't part of this probe.
 
-## Release gate
+## Checking a result
 
 Run the native eval with --no-publish and explicit output/report paths outside the repo,
 then check its native aggregate export:

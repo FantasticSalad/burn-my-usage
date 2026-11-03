@@ -1,6 +1,6 @@
 # Design
 
-Contents: origin, components, compatibility, decisions and remaining release work.
+Contents: origin, components, compatibility, decisions and what's still open.
 
 ## Origin
 
@@ -47,9 +47,9 @@ commit; failures block it. Every finished item has a verified local bundle and a
 Read-only review can cover all unmerged branches, while other sessions' branches are
 never adopted or changed without explicit approval.
 
-## Remaining release work
+## Still open
 
-Actual check results and owner gates live in the maintainer's release record. A clean history, privacy review,
-model evals with a baseline, a clean installation/real task and an independent user's run
-are separate evidence. No directory submission or public release is implied by a passing
-unit suite. Cross-repository agent fan-out and scheduling are future work.
+Nobody independent of development has installed the plugin, run a real task with it or reviewed
+the guard. A clean history, a privacy review, model evals with a baseline, a clean installation
+and an independent user's run are separate evidence, and a passing unit suite establishes none
+of them. Cross-repository agent fan-out and scheduling are future work.
