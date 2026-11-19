@@ -19,6 +19,23 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/skills/burn-my-usage/scripts/burn-it-all.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/skills/burn-my-usage/scripts/until-limit.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/skills/burn-my-usage/scripts/until-limit.sh\"",
+            "timeout": 10
           }
         ]
       }

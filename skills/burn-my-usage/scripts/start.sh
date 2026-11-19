@@ -2,9 +2,22 @@
 # Starts a burn run: marks this session active (which switches the guard on for it), makes a
 # run folder, and prints what the run needs to know.
 #   bash start.sh <session id>
+#   bash start.sh --until-limit <session id>
+#        no stop line: the run works until Claude Code's usage limit stops it, then wraps up
+#        on the next turn (until-limit.sh). For clients whose status line doesn't refresh.
 #   bash start.sh --paths      print the paths and what exists; change nothing (plan, status)
 set -eu
 . "$(dirname "$0")/lib.sh"
+
+until_limit=0
+if [ "${1:-}" = --until-limit ]; then
+  until_limit=1
+  shift
+  if [ "$BMU_HOST" != claude-code ]; then
+    echo 'ERROR: --until-limit needs Claude Code, whose StopFailure hook reports the usage limit' >&2
+    exit 2
+  fi
+fi
 
 report_files() {
   for f in config.md INBOX.md wishlist.md recurring.md lessons.md roots.txt usage.json guard.log; do
@@ -119,7 +132,10 @@ candidate="$BMU_HOME/runs/$stamp"
 mkdir "$candidate"
 run_dir=$candidate
 for sid in $ids; do
+  # A limit an earlier run in this session hit doesn't end this one.
+  rm -f "$BMU_HOME/limit-hit/$sid" "$BMU_HOME/limit-hit/$sid.told"
   printf 'started %s\nrun %s\n' "$(local_time)" "$stamp" >"$markers/$sid"
+  [ "$until_limit" = 0 ] || echo 'mode until-limit' >>"$markers/$sid"
 done
 claimed=0
 # BURN IT ALL typed in this session before the run started counts if it was within the hour;
@@ -148,4 +164,9 @@ report_version
 echo "LOCAL_TIME=$(local_time)"
 report_files
 [ "$burn_all" = 0 ] || echo "BURN_IT_ALL=on: the user typed BURN IT ALL; this run's stop line is 100%."
+if [ "$until_limit" = 1 ]; then
+  echo "UNTIL_LIMIT=on: no stop line and no usage checks. The run works until Claude Code's usage"
+  echo "limit stops it, then wraps up on the next turn. Extra usage must be off (claude.ai Settings >"
+  echo "Usage): with it on, the limit never stops the run and the work past it is billed."
+fi
 echo "NEXT: run  echo burn-guard-selftest  . A denial that says 'self-test OK' means the guard is on."

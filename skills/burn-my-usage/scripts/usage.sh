@@ -10,6 +10,9 @@
 #   stop     at or past the stop line: save work in progress and finish now
 #   unknown  no fresh data: save current work, write a handoff and stop
 #
+# An until-limit run (start.sh --until-limit) skips all of this: go until Claude Code's usage
+# limit has stopped it (until-limit.sh records that), then stop.
+#
 # The stop line is stop_at in config.md (default 90): the share of the weekly limit the run may
 # use, counting what you used yourself earlier in the week. It leaves headroom; sampled usage
 # cannot guarantee that paid extra usage will never be reached.
@@ -30,6 +33,20 @@ if [ "$BMU_HOST" = codex ]; then
   # Node is a native Windows program: give it Windows paths. Git Bash doesn't convert a path
   # with an apostrophe in it, and Node would read /c/Users/... as C:\c\Users\...
   BURN_MY_USAGE_HOME=$(native_path "$BMU_HOME") exec node "$(native_path "$(cd "$(dirname "$0")" && pwd)")/usage-codex.mjs" check "${1:-}" "${2:-}"
+fi
+
+# An until-limit run has no stop line and needs no usage data: Claude Code's own limit ends
+# it, and until-limit.sh records when. Then it's stop, so the run saves its work and finishes.
+if until_limit_run; then
+  echo 'until_limit=on'
+  if limit_hit; then
+    echo 'verdict=stop'
+    echo "reason=Claude Code's usage limit stopped this run at $REPLY. Save the item in hand as WIP and finish the run"
+  else
+    echo 'verdict=go'
+    echo "reason=until-limit run: no stop line; it carries on until Claude Code's usage limit stops it"
+  fi
+  exit 0
 fi
 
 stop_at=$(config_value stop_at 90)

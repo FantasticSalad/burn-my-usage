@@ -22,6 +22,13 @@ If you lose the thread after a context compaction, re-read this file and the run
 
 Read the mode supplied by the host:
 - *(empty)* or `run`: a full run, sections 0 to 7.
+- `until-limit`: a full run with no stop line, for a client whose status line doesn't
+  refresh, such as the VS Code panel. Start it with `start.sh --until-limit "<session>"`.
+  `usage.sh` then says `go` without usage data until Claude Code's usage limit (the 5-hour
+  or the weekly one, whichever comes first) stops the run, and `stop` after that. The turn
+  after the limit, whether the user's next message or Claude Code carrying on by itself after
+  the reset, is told the run is over: commit the item in hand as WIP (section 4's `stop`)
+  and finish (section 7). Only the user's own argument selects this mode; never pick it.
 - `setup`: follow [setup.md](setup.md). The user is present for this one, so asking is fine.
 - `plan`: a dry run with no repo or inbox changes. `bash "<scripts>/start.sh" --paths`,
   then section 1 steps 3, 5 and 6, read the inbox without acting on it, build the queue
@@ -79,7 +86,8 @@ value), or you see signs of compromise.
 
 ## 1. Start
 
-1. `bash "<scripts>/start.sh" "<session>"`. It marks the run
+1. `bash "<scripts>/start.sh" "<session>"`, with `--until-limit` before the session in
+   that mode. It marks the run
    active and prints `BURN_HOME`,
    `RUN_DIR` and what exists. If it says `HAS_config=no`, `NO_CONFIG` or `NO_ROOTS`, stop
    (see Modes); without a config or a usable roots.txt it starts nothing and exits non-zero.
@@ -216,7 +224,8 @@ card) and go to section 7.
 ## 6. When to stop
 
 Not after a count of items or a set time. Stop when:
-- `usage.sh` says `wrap` or `stop`; or
+- `usage.sh` says `wrap` or `stop`, or in an until-limit run a hook or the guard says the
+  usage limit stopped it; or
 - the queue has no Build items left and every Brief is written. **Spare usage is not a reason
   to invent work.** Before stopping on an empty queue, do the deeper passes once: lower tiers,
   review passes over every open branch, and, if `ideas: yes` in config, a batch of ideas in
@@ -255,7 +264,8 @@ phrase. If they type it after a run stopped at its line, start `/burn-my-usage` 
    it can't be stopped, say plainly in your reply what the user needs to do, rather than
    only writing an inbox card.
 7. **Report**, short enough to read on a phone:
-   - one line on the outcome, and the usage line from `usage.sh`;
+   - one line on the outcome, and the usage line from `usage.sh` (in an until-limit run,
+     when the usage limit stopped it);
    - new branches in merge order, one line each with its test and CI result;
    - the inbox in one line: decisions (and roughly how many minutes), branches, jobs;
    - anything they should know, and any slips;

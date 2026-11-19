@@ -111,8 +111,8 @@ for sid in $ids; do
     fi
     stopped=1
   fi
-  # BURN IT ALL lasts for one run only.
-  rm -f "$BMU_HOME/burn-it-all/$sid"
+  # BURN IT ALL lasts for one run only, and so does a usage limit an until-limit run hit.
+  rm -f "$BMU_HOME/burn-it-all/$sid" "$BMU_HOME/limit-hit/$sid" "$BMU_HOME/limit-hit/$sid.told"
 done
 if ! rm -f "$BMU_HOME/run.lock/owner" || ! rmdir "$BMU_HOME/run.lock"; then
   cp "$backup/owner" "$BMU_HOME/run.lock/owner" || echo 'ERROR: owner restoration failed' >&2

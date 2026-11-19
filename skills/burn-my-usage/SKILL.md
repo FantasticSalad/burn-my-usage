@@ -1,6 +1,6 @@
 ---
 name: burn-my-usage
-description: Turns spare weekly usage into review-ready work across local repositories while the user is away. Uses isolated branches, tests, review and an inbox of decisions; never deploys or publishes and stops when usage is unavailable. Use for "burn my usage", "burn my tokens", "use up my usage", "spend my spare usage", "end of week run", or "work on my repos while I'm away". Supports setup, plan, inbox, status and stop modes. Not for checking usage numbers.
+description: Turns spare weekly usage into review-ready work across local repositories while the user is away. Uses isolated branches, tests, review and an inbox of decisions; never deploys or publishes and stops when usage is unavailable. Use for "burn my usage", "burn my tokens", "use up my usage", "spend my spare usage", "end of week run", or "work on my repos while I'm away". Supports setup, plan, until-limit (no stop line: run until Claude Code's usage limit, then wrap up), inbox, status and stop modes. Not for checking usage numbers.
 license: MIT
 compatibility: Claude Code 2.1.295 or later with bash 3.2 and git; Codex native unattended runtime acceptance remains blocked.
 ---

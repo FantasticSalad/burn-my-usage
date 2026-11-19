@@ -125,6 +125,14 @@ deny() {
   exit 0
 }
 
+# An until-limit run that the usage limit stopped (until-limit.sh) is over. If Claude Code
+# carries on by itself after the reset, no message starts the turn to say so: refuse the first
+# call once with the instruction to wrap up. A message from the user says it instead.
+if [ -f "$home/limit-hit/$session" ] && [ ! -f "$home/limit-hit/$session.told" ] &&
+  : >"$home/limit-hit/$session.told" 2>/dev/null; then
+  deny "the usage limit stopped this until-limit run at $(sed -n 2p "$home/limit-hit/$session"), so the run is over. Start nothing new: commit the item in hand with WIP: in the message, update its card and finish the run (workflow section 7). If this call was part of that, repeat it"
+fi
+
 # --- paths --------------------------------------------------------------------------------
 
 secret_path() {
@@ -158,7 +166,7 @@ protected_path() {
     */.gitlab-ci.yml/* | */azure-pipelines.yml/* | */jenkinsfile/* | */bitbucket-pipelines.yml/*) return 0 ;;
   esac
   case "$p" in
-    "$home_n"/config.md | "$home_n"/guard-deny.txt | "$home_n"/guard-allow-mcp.txt | "$home_n"/roots.txt | "$home_n"/bin | "$home_n"/bin/* | "$home_n"/active | "$home_n"/active/* | "$home_n"/owned | "$home_n"/owned/* | "$home_n"/run.lock | "$home_n"/run.lock/* | "$home_n"/usage | "$home_n"/usage/* | "$home_n"/usage.json | "$home_n"/guard.log | "$home_n"/burn-it-all | "$home_n"/burn-it-all/* | "$home_n"/page-answers | "$home_n"/page-answers/*) return 0 ;;
+    "$home_n"/config.md | "$home_n"/guard-deny.txt | "$home_n"/guard-allow-mcp.txt | "$home_n"/roots.txt | "$home_n"/bin | "$home_n"/bin/* | "$home_n"/active | "$home_n"/active/* | "$home_n"/owned | "$home_n"/owned/* | "$home_n"/run.lock | "$home_n"/run.lock/* | "$home_n"/usage | "$home_n"/usage/* | "$home_n"/usage.json | "$home_n"/guard.log | "$home_n"/burn-it-all | "$home_n"/burn-it-all/* | "$home_n"/limit-hit | "$home_n"/limit-hit/* | "$home_n"/page-answers | "$home_n"/page-answers/*) return 0 ;;
   esac
   return 1
 }
@@ -1295,6 +1303,11 @@ check_shell() {
   # The run can't run that hook itself with a made-up message, or touch its folder at all.
   case "$cmd" in
     *burn-it-all*) deny "only the user can arm BURN IT ALL, by typing it; a run never runs or changes it" ;;
+  esac
+  # The record that the usage limit stopped an until-limit run (until-limit.sh): removing it
+  # would let the run carry on into the next window instead of wrapping up.
+  case "$cmd" in
+    *limit-hit*) deny "the limit-hit folder records when the usage limit stopped an until-limit run; a run never changes it" ;;
   esac
   case "$cmd" in
     *inbox.md* | *burn-my-usage/active* | *burn-my-usage\\active* | *"$home"/active* | *"$home_n"/active* | *run.lock* | *codex.json* | *guard.log* | *guard-deny.txt* | *guard-allow-mcp.txt* | *roots.txt* | *page-answers*)

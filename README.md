@@ -155,7 +155,7 @@ claude --permission-mode auto --add-dir ~/.burn-my-usage
 - **Start it from a terminal `claude` session.** A run knows your usage from the status line,
   and treats data older than an hour as unknown, which stops it. The terminal refreshes the
   status line as the run works; the VS Code panel was seen not to, which left a run about an
-  hour.
+  hour. To run from the VS Code panel anyway, use the until-limit mode below.
 - **Use a dedicated session.** Until the run stops, that session can only change files in
   your roots, the burn home and temp folders, and only commit on `burn/` branches. Do your own
   work in another session.
@@ -166,6 +166,25 @@ claude --permission-mode auto --add-dir ~/.burn-my-usage
   stops at its line with work left tells you it can. **Turn extra usage off first** (claude.ai
   Settings > Usage): usage is sampled, so a run can overshoot 100%, and with extra usage on,
   anything past your limit is billed.
+
+### Until the limit (VS Code, or any client without the status line)
+
+```text
+/goal Run /burn-my-usage until-limit to the end. Done when its final report is written and stop.sh has printed STOPPED.
+```
+
+This run has no stop line and never reads your usage. It works until Claude Code's usage
+limit stops it: the 5-hour limit or the weekly one, whichever comes first. A hook records
+when. The next turn in that conversation finishes the run: it saves the item in hand as WIP,
+updates the inbox and writes the report. That turn is either your next message or Claude
+Code carrying on by itself after the limit resets, whichever comes first.
+
+- **Extra usage must be off.** With it on, the limit never stops the run, and everything past
+  it is billed. Your stop line doesn't apply either: the run can use all that's left of your
+  week.
+- **Keep the conversation open.** Only the run's own session can finish it. If you close it,
+  reopen the same conversation from the history and send any message.
+- In the VS Code panel, pick auto mode in the mode menu before you start.
 
 ## Your week with it
 
@@ -203,6 +222,7 @@ It is optional and off by default, because card text is then stored on claude.ai
 | Command | What it does |
 |---|---|
 | `/burn-my-usage` | A full run |
+| `/burn-my-usage until-limit` | A full run with no stop line, until Claude Code's usage limit; then it wraps up |
 | `/burn-my-usage setup` | First-time setup, or fill in what's missing |
 | `/burn-my-usage plan` | Build and show the queue; change nothing |
 | `/burn-my-usage inbox` | Process your answers only |

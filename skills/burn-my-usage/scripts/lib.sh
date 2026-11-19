@@ -62,3 +62,32 @@ session_ids() {
   [ -n "$b" ] && [ "$b" != "$a" ] && echo "$b"
   [ -n "$a$b" ]
 }
+
+# Until-limit runs (start.sh --until-limit): no stop line; Claude Code's usage limit ends them.
+# until_limit_run: does the run holding the lock have that mode? Claude Code only.
+# limit_hit: if the usage limit has stopped that run, REPLY = when, in local time.
+lock_ids() {
+  [ -f "$BMU_HOME/run.lock/owner" ] && sed -n '3,$p' "$BMU_HOME/run.lock/owner"
+}
+until_limit_run() {
+  local sid
+  [ "$BMU_HOST" = claude-code ] || return 1
+  for sid in $(lock_ids); do
+    valid_session "$sid" || continue
+    grep -qx 'mode until-limit' "$BMU_HOME/active/$sid" 2>/dev/null && return 0
+  done
+  return 1
+}
+limit_hit() {
+  local sid
+  REPLY=""
+  for sid in $(lock_ids); do
+    valid_session "$sid" || continue
+    if [ -f "$BMU_HOME/limit-hit/$sid" ]; then
+      REPLY=$(sed -n '2p' "$BMU_HOME/limit-hit/$sid")
+      REPLY=${REPLY:-an unrecorded time}
+      return 0
+    fi
+  done
+  return 1
+}

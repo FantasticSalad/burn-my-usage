@@ -143,6 +143,9 @@ credits or use provider-side billing caps.
 `usage.sh` reads the weekly usage the status line tap saves and returns `stop` at the user's
 line (default 90%), counting their own usage. The skill checks it after every item.
 
+An until-limit run (2026-11-19, below) has no stop line: it carries on without usage data
+until Claude Code's usage limit stops it, so only the billing settings bound its cost.
+
 ## What the guard cannot stop
 
 It matches strings in tool calls. Anything that hides the real action from the string gets
@@ -232,6 +235,41 @@ practice: if your remote protects the default branch, nothing reaches it without
   the refusal.
 
 ## Decision log
+
+### 2026-11-19: Until-limit runs: no stop line, and the limit ends the run
+
+**Problem.** A run needs fresh usage data from the status line, and the VS Code panel doesn't
+refresh it, so a run started there stopped within about an hour. Users wanted to start a run
+without leaving the editor and let it go until the plan's limit, without usage checks.
+
+**Options.** Keep requiring a terminal session; read usage from somewhere else (nothing else
+exposes it, and raw session stores are off limits); or add a mode with no stop line that
+relies on Claude Code's own limit, recorded by its `StopFailure` hook (`rate_limit` matcher).
+
+**Decision.** The third, chosen by the user's own argument (`/burn-my-usage until-limit`).
+`start.sh --until-limit` writes the mode into the run's marker, which the guard already
+protects. `usage.sh` says `go` without usage data until `until-limit.sh` has recorded the
+limit in `limit-hit/<session id>`, then `stop`, so the guard's cost gate refuses new
+worktrees, pushes and edits outside the burn home as at any other stop. The turn after the
+limit is told the run is over: by the `UserPromptSubmit` hook when the user's message starts
+it, otherwise by the guard refusing the first call once. The first hit counts; the guard
+refuses the run's own writes to the `limit-hit` folder, so a run can't clear the record and
+carry on into the next window. `stop.sh` and the next `start.sh` remove it. Claude Code only.
+
+**Accepted risk.** The stop line no longer protects the rest of the week, and with paid extra
+usage on, the limit never arrives: every token past it is billed. The mode is never picked by
+the run, start.sh prints the warning, and the README says to turn extra usage off. Not yet
+verified against a real limit: that a plan usage limit reaches `StopFailure` as `rate_limit`,
+and whether Claude Code's own continuation after the reset fires `UserPromptSubmit` (the guard
+covers it if not). A transient rate-limit error that ends a turn would also end the run early,
+which only costs work, not money.
+
+**Verification.** `tests/until-limit.test.sh` (33 checks, 19 failing on the previous code):
+an ordinary run is unchanged; go without, with stale and with over-the-line data; another
+session's limit ignored; stop after the limit, keeping the first time; the wrap-up told once
+by the guard or by the next message; the record protected from file tools, the shell and a
+restart; cleared by stop and start; Codex refused. Full suite and strict manifest validation
+pass.
 
 ### 2026-11-19: An optional inbox page, and approvals the run still can't forge
 

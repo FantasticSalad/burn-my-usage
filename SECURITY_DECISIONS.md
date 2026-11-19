@@ -2,6 +2,27 @@
 
 The runtime and guard decision log remains in [SECURITY.md](SECURITY.md).
 
+## 2026-11-19: macOS and Windows tests run on the default branch only in a private repository
+
+Problem: every push ran the suite on Linux, macOS and Windows. Hosted macOS and Windows
+runners are charged at several times the Linux rate in a private repository, and there the
+matrix used a month's included usage in twelve days. With a zero budget, no hosted job then
+started until the next month, so nothing was tested in CI at all.
+Options: pay for more usage; keep the matrix on every push and accept the block; a
+self-hosted runner, which leaves a service on a workstation that runs workflow code; or run
+macOS and Windows less often.
+Decision: Linux runs on every push. macOS and Windows run on pushes to the default branch,
+and on every run in a public repository, where hosted runners are free. A pull request from
+a branch of the same repository no longer starts a second run; one from a fork still does.
+Consequence: in a private repository, a break that shows only under bash 3.2 or Git Bash is
+found after the branch reaches the default branch, not before. Some guard cases run on
+Windows only, so run `bash tests/run-all.sh` under Git Bash before landing a guard change.
+There is no local stand-in for the macOS job.
+Verification: the workflow parses as YAML and the full suite passes locally on Windows. In a
+private repository a branch push started one job, on Linux, and a default-branch push
+started all three. Hosted jobs were blocked when this was written, so those runs show the
+jobs being created, not passing: check the first runs after the usage reset.
+
 ## 2026-11-15: the public identity is the GitHub handle
 
 Problem: the licence, the three manifests and the release scanner each carried the owner's

@@ -100,6 +100,13 @@ then, inside Claude Code:
   `caffeinate -i claude ...`. Windows: set sleep to Never while plugged in. Linux:
   `systemd-inhibit claude ...`.
 - **Stop it** any time with Esc, then `/burn-my-usage stop`.
+- **From the VS Code panel**, where the status line doesn't refresh, offer the until-limit
+  mode instead: pick auto mode in the panel's mode menu, then
+  `/goal Run /burn-my-usage until-limit to the end. Done when its final report is written and stop.sh has printed STOPPED.`
+  It has no stop line and needs no usage data: it works until Claude Code's usage limit
+  stops it, and the next turn wraps up. Extra usage must be off, or the limit never comes
+  and the work past it is billed. Keep the panel's conversation open: only the run's own
+  session can finish it.
 
 Finish setup with a summary: where the burn home is, what was written, what to do next.
 
