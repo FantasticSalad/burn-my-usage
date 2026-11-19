@@ -2,6 +2,21 @@
 # Works on bash 3.2 (macOS), Linux and Git Bash on Windows.
 
 BMU_HOME=${BURN_MY_USAGE_HOME:-$HOME/.burn-my-usage}
+# On Windows, keep the home in C:/... form. git and Node are native programs, and Git Bash
+# doesn't convert a /c/Users/... path with an apostrophe in it for them: git then made item
+# worktrees under C:\tmp or C:\c\Users instead of the burn home.
+case "$BMU_HOME" in
+  /*) command -v cygpath >/dev/null 2>&1 && BMU_HOME=$(cygpath -m "$BMU_HOME") ;;
+esac
+BMU_HOST=${BMU_HOST:-claude-code}
+
+valid_host() {
+  case "$BMU_HOST" in claude-code|codex) return 0 ;; *) return 1 ;; esac
+}
+
+marker_dir() {
+  if [ "$BMU_HOST" = codex ]; then printf '%s\n' "$BMU_HOME/active/codex"; else printf '%s\n' "$BMU_HOME/active"; fi
+}
 
 # A path that Claude's Read and Write tools accept. On Windows that is C:/Users/x, not the
 # /c/Users/x that Git Bash prints.
@@ -36,7 +51,9 @@ valid_session() {
 # same. If they ever differ, both are marked, so the guard can't miss the session. An id that
 # was passed but is malformed is an error, not a reason to fall back.
 session_ids() {
-  local a=${1:-} b=${CLAUDE_CODE_SESSION_ID:-}
+  local a=${1:-${BMU_SESSION_ID:-}} b=""
+  valid_host || return 1
+  [ "$BMU_HOST" = claude-code ] && b=${CLAUDE_CODE_SESSION_ID:-}
   if [ -n "$a" ] && ! valid_session "$a"; then
     return 1
   fi

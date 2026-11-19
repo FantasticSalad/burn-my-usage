@@ -22,7 +22,7 @@ if [[ $input =~ $re ]]; then
   if mkdir -p "$home" 2>/dev/null; then
     now=$(date +%s)
     tmp="$home/.usage.json.$$"
-    printf '{"captured_at":%s,"rate_limits":%s}\n' "$now" "$rl" >"$tmp" && mv -f "$tmp" "$home/usage.json"
+    printf '{"provider":"claude-code","captured_at":%s,"rate_limits":%s}\n' "$now" "$rl" >"$tmp" && mv -f "$tmp" "$home/usage.json"
   fi
 fi
 

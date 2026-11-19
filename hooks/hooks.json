@@ -11,6 +11,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/skills/burn-my-usage/scripts/burn-it-all.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

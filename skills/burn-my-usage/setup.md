@@ -2,46 +2,74 @@
 
 Contents: requirements, burn home, repos, pushes, usage, status line, guard, optional checks, run.
 
-First-time setup, with the user present. Ask the user where it says so, offer
+First-time setup, with the user present. Resolve `<skill>` and `<scripts>` as literal paths using the host binding. Ask the user where it says so, offer
 sensible defaults, and keep it to a few minutes. Never edit a settings file without showing
 the change and getting a yes. Re-running setup is safe: it keeps existing files and only
-fills gaps, unless the user asks to start over.
+fills gaps, unless the user asks to start over. If `config.md` and `roots.txt` already exist
+and `start.sh --paths` shows the expected burn home, setup was stopped for a restart: show
+the saved answers in a few lines and continue at step 6.
 
 ## 1. Check this is the right tool for them
 
-Explain in two or three sentences what a run does and what it never does (SKILL.md section 0).
+**Costs first, before anything else.** Ask the user to confirm both, plainly:
 
-Then ask how they pay for Claude Code:
-- **Pro or Max (or Team/Enterprise seat):** go on. Spare weekly usage is what this is for.
-- **API key, Bedrock, Vertex or Foundry:** every token is billed. There is no "spare" usage,
-  only spend. Say so plainly; continue only if they still want it, and then set `stop_at`
-  aside: they should cap spend in their provider's console instead.
+1. They're on a subscription plan, not per-token billing (an API key, Bedrock, Vertex or
+   Foundry). On per-token billing every token a run spends is charged and there is no spare
+   usage; continue only if they still want to, with provider-side spending caps.
+2. Paid extra usage is off in their account's usage settings, or capped at an amount they're
+   happy to pay. With it on, the host keeps going past the weekly limit and bills them.
 
-Ask whether **usage credits** (extra usage) are on in claude.ai Settings > Usage. If they are,
-a run that went past the weekly limit could draw on paid credits. `stop_at` exists to prevent
-that; recommend they keep it at 90 or lower.
+Then show this, word for word, and continue only once they've acknowledged it:
+
+> Burn My Usage is provided as is, without warranty of any kind (see LICENSE). The stop line
+> works from sampled usage and a run can overshoot it; BURN IT ALL takes a run to 100% on
+> purpose. Your billing settings are the only reliable money boundary. You are responsible
+> for any charges that running it incurs, and the author accepts no liability for them.
+
+Explain in two or three sentences what a run does and what it never does (workflow.md section 0).
+Recommend a stop line of 90% or lower; a sampled usage line is not a spending guarantee.
 
 ## 2. Burn home
 
-Default `~/.burn-my-usage`. If the user wants to answer the inbox from their phone, suggest a
-folder their phone can see (Dropbox, OneDrive, iCloud Drive, Syncthing), or making the burn
-home a private git repo. A different location needs `BURN_MY_USAGE_HOME` set for Claude Code:
-in `~/.claude/settings.json` under `"env"`, so hooks and scripts see it too. Show the change
-and ask before writing it.
+Default `~/.burn-my-usage`. Recommend a local folder. If the user wants to answer the inbox
+from their phone and asks about a synced folder (Dropbox, OneDrive, iCloud Drive, Syncthing)
+or a private git repo, tell them first what the whole burn home holds, because all of it would
+sync:
 
-Create the folder, then copy in from `${CLAUDE_SKILL_DIR}/templates/`: `config.md`,
-`INBOX.md`, `wishlist.md`, `lessons.md`, and `${CLAUDE_SKILL_DIR}/recurring.md`. Don't
+- every item's live git worktree (`worktrees/`). Sync clients hold files open, and on the
+  first real run OneDrive made `git worktree remove` fail, leaving folders to delete by hand.
+- a Git bundle of every branch (`backups/`), holding the full history of private repos,
+  which would then be uploaded to the sync provider.
+- `usage.json`, rewritten on every status line refresh, and the status line script in
+  `bin/`, which runs on every refresh. A synced copy from another machine would be run.
+
+A burn home that is itself a git repo would contain nested worktrees and bundles. Let them
+choose; a local folder is the recommendation until only the files they edit can be synced.
+
+A different location needs `BURN_MY_USAGE_HOME` available to the host's scripts and
+guard. Follow the host binding, and show and obtain approval for any settings change.
+
+Create the folder, then copy in from `<skill>/templates/`: `config.md`,
+`INBOX.md`, `wishlist.md`, `lessons.md`, and `<skill>/recurring.md`. Don't
 overwrite files that exist.
 
 ## 3. Repos
 
-Ask where their repos live (AskUserQuestion; offer folders that exist among `~/code`, `~/src`,
-`~/dev`, `~/projects`, `~/repos`, `~/git`, `~/github`, `~/Documents/GitHub`, plus Other).
-Several folders are fine. Run `bash "${CLAUDE_SKILL_DIR}/scripts/repo-check.sh" --no-fetch
-<folders>` and show what it found, idle days included.
+Ask where their repos live (offer folders that exist among `~/code`, `~/src`,
+`~/dev`, `~/projects`, `~/repos`, `~/git`, `~/github`, `~/Documents/GitHub`, and on Windows
+also `C:/src`, `C:/dev`, `C:/repos` and `C:/git`, plus Other). If none of them
+exist, say so before asking for a path, so an empty list doesn't look broken.
+Several folders are fine. Run `bash "<scripts>/repo-check.sh" --no-fetch --summary
+<folders>` and show its table and open-work lines, idle days included. The full scan, with
+raw worktree and branch lists, is for runs.
 
 Ask which repos to **skip** entirely (client work under NDA, anything they don't want touched),
 and whether any deserve **high** priority. Everything else is tiered by recent activity.
+
+Say plainly that `skip:` is an instruction to the run, not an enforced boundary: the scanner
+still fetches and inspects every repository under a root, and the guard doesn't stop the run
+reading a skipped repo's files. If a repo must not be read, don't list its parent folder as a
+root: list each other repository's own path as a root instead, and leave that one out.
 
 Write the folders to `roots:` in `config.md` and, one absolute path per line, to `roots.txt`
 in the burn home. The guard reads `roots.txt` and refuses edits outside those folders, the
@@ -49,7 +77,7 @@ burn home and temp directories.
 
 ## 4. Pushing branches
 
-Ask (AskUserQuestion):
+Ask:
 - **never (recommended):** keep every branch local, with a verified backup bundle.
 - **private:** push `burn/` branches only to private GitHub repos, so CI runs
   on them and they're backed up. Public repos keep their branches local, because a pushed
@@ -64,55 +92,43 @@ Existing config is preserved; never silently change an existing push choice.
 ## 5. Usage line
 
 Ask what share of the weekly limit a run may take, counting what they used themselves
-(AskUserQuestion: 80, 90 (recommended), 95). Write `stop_at:`.
+(80, 90 (recommended), 95). Write `stop_at:`.
 
-## 6. Status line tap (how a run knows how much is left)
+## 6. Usage and guard
 
-Claude Code gives a status line command the plan's usage, and nothing else does. So:
+Follow the selected host binding for usage and guard verification. Show any proposed
+settings change and obtain the user's approval before applying it. Missing or stale usage
+means an unattended run saves its work and stops. Sampled percentages cannot guarantee
+zero paid usage; use provider billing controls for a money boundary.
 
-1. Copy `${CLAUDE_SKILL_DIR}/scripts/usage-tap.sh` to `<burn home>/bin/usage-tap.sh`. (The
-   plugin's own folder moves on every update, so settings must point at a copy.)
-2. Read `~/.claude/settings.json`. If it already has a `statusLine` command, save that command
-   string to `<burn home>/statusline-next`: the tap runs it afterwards with the same input, so
-   their status line looks exactly as before.
-3. Show the change, ask, then set:
-   ```json
-   "statusLine": { "type": "command", "command": "bash \"<burn home>/bin/usage-tap.sh\"" }
-   ```
-   using the absolute burn home path (forward slashes on Windows).
-4. After the next reply, `<burn home>/usage.json` should exist.
-   `bash "${CLAUDE_SKILL_DIR}/scripts/usage.sh"` reads it.
+## 7. Inbox page (optional, Claude Code only)
 
-If they decline or usage data is missing/stale, planning works but an unattended run must
-save current work and stop. Disable paid extra usage or set provider billing caps for a
-money boundary: sampled percentages cannot guarantee zero overage.
+Offer it if this session has the `Artifact` and `ArtifactData` tools; otherwise say the inbox
+is `INBOX.md` and move on. Explain it plainly before asking:
 
-## 7. Guard
+- It is a private page on claude.ai where they answer cards with one tap, from a phone too.
+  Only they can open it, and its data is readable and writable only by its owner.
+- Every card a run writes to `INBOX.md` is also sent there, so card text (repo and branch
+  names, what a change does, questions) is stored on claude.ai. Secrets never go on a card.
+- A run can add and update cards but can't answer them, and can't publish or share pages.
+  Approving a branch there approves the exact commit shown, and the merge stays local.
 
-If this skill came from the plugin, the guard is already registered as a hook. Otherwise
-(a skill copied into `~/.claude/skills/`), offer to install it: copy
-the entire `${CLAUDE_SKILL_DIR}/scripts/` folder into `<burn home>/bin/` so guard.sh,
-lib.sh, usage.sh and leak-check.sh stay together; show the change, ask,
-and add to `~/.claude/settings.json`:
+If they want it:
 
-```json
-"hooks": {
-  "PreToolUse": [
-    { "hooks": [ { "type": "command", "command": "bash \"<burn home>/bin/guard.sh\"", "onFailure": "block" } ] }
-  ]
-}
-```
+1. Publish `<skill>/templates/inbox.html` with the `Artifact` tool, icon `inbox`, and
+   `capabilities` set to
+   `{"db": {"rules": [{"path": "items", "read": "owner", "write": "owner"}, {"path": "answers", "read": "owner", "write": "owner"}]}, "user": {}}`.
+   Confirm the result says only they can read it.
+2. Check the rules: `ArtifactData` `list` of `items` with `as_level: "admin"` must return
+   nothing.
+3. Show the URL and, with their yes, write it to `inbox_page:` in `config.md`.
+4. Mirror the open cards in `INBOX.md` to the page ([inbox.md](inbox.md), "Publish, with a
+   page"). Tell them not to share the page or change its access rules: an answer there
+   approves merges on their machine.
 
-merging with any `hooks` already there. The hook must use onFailure: block (Claude Code 2.1.295+). A missing or broken hook then
-blocks ordinary tool calls too, until the user repairs or disables the plugin. It costs one
-bash start per tool call and does
-nothing outside a burn run.
-
-Then test it: `bash "${CLAUDE_SKILL_DIR}/scripts/start.sh" ${CLAUDE_SESSION_ID}`, then
-`echo burn-guard-selftest` (a refusal that says "self-test OK" means it works), then
-`bash "${CLAUDE_SKILL_DIR}/scripts/stop.sh" ${CLAUDE_SESSION_ID}`, and delete the empty run
-folder start.sh made. A hook added to settings mid-session may need a restart before it fires; if the
-echo just runs, ask them to restart Claude Code and run `/burn-my-usage setup` again to test.
+To update the page after a plugin update, publish the template again to the same URL,
+leaving `capabilities` out so the rules stay as they are. To stop using it, clear
+`inbox_page:`; runs go back to `INBOX.md` alone.
 
 ## 8. Optional
 
@@ -121,31 +137,15 @@ echo just runs, ask them to restart Claude Code and run `/burn-my-usage setup` a
 - **Extra deny patterns:** `guard-deny.txt` in the burn home, one regular expression per line,
   for their own deploy scripts and the like (`deploy\.sh`, `make (release|ship)`).
 - **Wishlist:** show them `wishlist.md`. Jotting things there during the week is what makes
-  the runs useful.
+  the runs useful. Most repo plans are prose rather than `- [ ]` checklists, which a run
+  can read but often finds held for the user; the wishlist is the reliable way to queue work.
+- **Audit tools:** from the scan, note which ecosystems their repos use (package.json,
+  pyproject.toml or requirements.txt, Cargo.toml, go.mod, Gemfile) and check which audit
+  tools are installed (`npm`, `pip-audit`, `cargo audit`, `govulncheck`, `bundle audit`).
+  Tell them which repos the weekly vulnerability check will skip, and what to install if
+  they want it. Don't install anything yourself.
 
-## 9. How to start a run
+## 9. Start
 
-Show this, adjusted to their folders, and suggest `/burn-my-usage plan` first to see the
-queue without changing anything:
-
-```bash
-cd ~/code
-claude --permission-mode auto --add-dir ~/.burn-my-usage
-```
-
-then, inside Claude Code:
-
-```text
-/goal Run /burn-my-usage to the end. Done when its final report is written and stop.sh has printed STOPPED.
-```
-
-- **Auto mode** lets it work without prompts, with a classifier checking each action. In
-  manual mode it would stop at the first prompt and wait all weekend.
-- **`/goal`** keeps it going turn after turn until the run says it is finished.
-- **Keep the session open and the computer awake.** When the 5-hour limit hits, Claude Code
-  waits and carries on by itself after the reset, but only in an open session. macOS:
-  `caffeinate -i claude ...`. Windows: set sleep to Never while plugged in. Linux:
-  `systemd-inhibit claude ...`.
-- **Stop it** any time with Esc, then `/burn-my-usage stop`.
-
-Finish with a summary: where the burn home is, what was written, what to do next.
+Follow the selected host binding's launch instructions and recommend plan mode first.
+Finish with a summary of the burn home, what was written and the next step.

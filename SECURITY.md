@@ -1,6 +1,11 @@
 # Security
 
-Contents: threats, controls, limitations, assumptions, security decision log.
+Contents: threats, controls, limitations, assumptions, security decision log. The development
+host boundary and outstanding runtime checks are in [host architecture](docs/HOST-ARCHITECTURE.md).
+
+Release artifact metadata decisions are also recorded in
+[SECURITY_DECISIONS.md](SECURITY_DECISIONS.md). This is a separate distribution
+review; the runtime guard does not validate image metadata or archive headers.
 
 Burn My Usage runs an AI agent unattended, for hours, across someone's repositories, with
 their git credentials and their shell. This file covers what could go wrong, what stops it,
@@ -17,7 +22,7 @@ The agent isn't assumed to be malicious. The realistic failures, roughly most li
    `git reset --hard` on a tree with the user's uncommitted work in it. Merging a branch
    nobody approved. Over hours of unattended work, small slips happen.
 2. **Scope drift.** Deciding a deploy would "finish the job", opening a pull request, tidying
-   CI config, upgrading a major version, editing Claude Code settings.
+   CI config, upgrading a major version, editing agent settings.
 3. **Prompt injection.** Text in a README, an issue, a web page, a test fixture or a
    dependency that reads like instructions. Issues on public repos can be written by anyone.
 4. **Secret exposure.** Reading `.env` or `~/.ssh` into context, printing a token, or editing
@@ -31,6 +36,31 @@ The agent isn't assumed to be malicious. The realistic failures, roughly most li
 
 ### The guard hook (enforced)
 
+This section describes the supported Claude hook. The experimental Codex adapter translates
+structured tool events into the shared policy and is tested offline. That does not prove
+the native Codex client installs, trusts or invokes it, or blocks a missing or failed hook.
+Those are required runtime gates before unattended Codex builds are supported.
+
+The experimental portable package now selects a separate Codex hook definition. Its startup
+handler supplies resource and recovery context without activating a run. The native tool
+bridge validates event identity and product-owned state before translating shell and patch
+calls; it does not read native transcript or credential stores. Preparing a checked copy
+and local marketplace catalog does not install the package or trust its hooks.
+
+Native hook coverage excludes subsequent interactive `write_stdin` input and some hosted
+or specialized paths. Explicit denials and bridge subprocess-error refusals are tested;
+the host's handling of missing runtimes, untrusted hooks or host-level timeouts is separate.
+Keep the sandbox and normal approval controls. The full boundary is documented in
+[host architecture](docs/HOST-ARCHITECTURE.md).
+
+The Windows Codex hook now has a literal PowerShell supervisor outside Node. It converts
+missing or failed Node startup, timeout and invalid bridge replies into an explicit denial.
+It requires a positive completion token before allowing the call. Its source template is
+embedded in the registered command at authoring time; the native client does not load a
+script file or override PowerShell execution policy. This reduces the observed interpreter
+failure gap while retaining the separate native-host acceptance gates above. The default
+non-Windows bootstrap has not received this startup supervision or native acceptance.
+
 `skills/burn-my-usage/scripts/guard.sh` is a `PreToolUse` hook. It is registered for every
 tool call but only acts in a session that has an active-run marker
 (`<burn home>/active/<session id>`, written by `start.sh`). Everywhere else it exits after one
@@ -43,17 +73,38 @@ During a run it refuses:
 |---|---|---|
 | Push | anything but `burn/` destinations (`HEAD` counts as the current branch); force in any spelling (`-f`, `-uf`, `+refspec`, `--force-with-lease`), `--all`, `--tags`, `--mirror`, a bare `git push`, `--no-verify`; the low-level `send-pack` and `http-push` | `git push -u origin burn/...`, deleting `burn/` branches |
 | Commits | `commit`, `cherry-pick`, `revert`, `rebase`, `reset`, non-ff `pull` unless the repo is on a `burn/` branch, including a branch switched to earlier in the same command or named by `--git-dir`/`--work-tree`; `commit -n` in any flag cluster; `git am`, which commits a patch without the staged checks; a commit whose staged changes include agent, CI or git configuration, however the file was changed | the burn home's own repo |
-| Merges | into a non-`burn/` branch, unless it's a fast-forward from its own upstream, or every ref named is a `burn/` branch whose inbox card has Merge ticked after its last reopen (option values such as `-m "..."` are not refs) | merges on `burn/` branches |
+| Merges | into a non-`burn/` branch, unless it's a fast-forward from its own upstream, or every ref named is a `burn/` branch the user approved: its inbox card has Merge ticked after its last reopen, or the inbox page holds an approval of the commit the branch is at now (option values such as `-m "..."` are not refs) | merges on `burn/` branches |
 | Destructive git | `reset --hard`, `clean -f`, `checkout -f`/`-- .`, `restore .`, `stash drop/clear`, deleting or force-moving non-burn branches, `filter-branch`, `update-ref`, `reflog expire`, `gc`, config writes, remote changes; `-c` settings for hooks, credentials, aliases, remotes, URL rewrites and includes, quoted or not; `--config-env`; the same settings, another repository or another index from the environment (`GIT_CONFIG_*`, `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_SSH*`); a git alias | reads, `stash push`, worktrees |
 | Outward actions | `gh` writes (PRs, issues, releases, repo settings, secrets, workflow runs, `api` with a method other than GET or with fields, in any spelling), `gh alias set`, `gh config set`, package publishing, cloud and infrastructure CLIs, `ssh`/`scp`/`rsync`, `git send-email`/`imap-send`/`daemon`/`instaweb`, curl/wget/PowerShell sending data (PowerShell parameter prefixes such as `-Meth Post` included), text piped into a shell (`curl | sh`, `echo ... | bash`), PowerShell `-EncodedCommand` | `gh` reads, GET requests, local builds and tests |
 | Machine | `sudo`, global package installs, cron/launchd/schtasks/systemctl changes | project-local installs (`npm install`, `uv sync`) |
 | Secrets | reading or writing `.env*` (not `.env.example`), including a glob such as `.env*`, keys, `~/.ssh`, `~/.aws`, credential stores; `printenv`, bare `env`/`set`; expanding an ALL-CAPS environment variable named like a secret (`$GITHUB_TOKEN`, `$env:API_KEY`) outside single quotes | |
-| Configuration | writing `.claude/`, `.git/` internals, CI workflow files, and the run's own controls (config, deny list, roots, markers, guard log), by Write/Edit or by a shell redirect, Windows 8.3 short names (`GITHUB~1`) included; committing any of them, however they were changed; any shell command that names `.claude/settings`, `.git/hooks` or `core.hooksPath`, reads included | reading them (settings and hooks with the Read tool) |
+| Configuration | writing `.claude/`, `.codex/`, `.agents/`, `.git/` internals, CI workflow files, and the run's own controls (config, deny list, roots, markers, guard log), by Write/Edit or by a shell redirect, Windows 8.3 short names (`GITHUB~1`) included; committing any of them, however they were changed; any shell command that names `.claude/settings`, `.git/hooks` or `core.hooksPath`, reads included | reading non-secret settings and hooks with a file tool |
 | Scope | edits and shell redirects outside the folders in `roots.txt`, the burn home and temp directories; parent traversal in write paths; ordinary file edits in primary checkouts or non-`burn/` worktrees | reads anywhere; canonical writes in linked `burn/` worktrees and non-repository scratch |
 | Inbox | any edit that adds a ticked box to `INBOX.md`; any shell command that names it and could write it (a redirect, `cp`/`mv`/`tee`, `sed -i`, an interpreter, a git command that rewrites files) | reading it, adding cards with empty boxes, moving cards |
-| Tools | `AskUserQuestion`, `ExitPlanMode` (they would stall the run), cross-session messages, scheduling, artifacts, and MCP tools whose names look like writes (`send`, `create`, `update`, `delete`, ...) unless allowed by name in `guard-allow-mcp.txt` | reads and searches |
+| Inbox page | the `Artifact` tool (publishing, reading, deleting or pinning any page); `ArtifactData` on any page but the `inbox_page` in `config.md`, or with none set; on that page, any write to `answers`, any `batch`, any call that names `action`, `url`, `collection` or `out_dir` twice, and saving anything to disk except `answers` into `<burn home>/page-answers/<session>`; writing that folder by Write/Edit or from the shell | reading the page's `items` and `answers`; writing one `items` document at a time |
+| Tools | `AskUserQuestion`, `ExitPlanMode` (they would stall the run), cross-session messages, scheduling, and MCP tools whose names look like writes (`send`, `create`, `update`, `delete`, ...) unless allowed by name in `guard-allow-mcp.txt` | reads and searches |
 
 Every refusal is appended to `<burn home>/guard.log`, which the run reads for its report.
+
+### Shared state and provider boundaries
+
+The common run lifecycle distinguishes host and session identity and uses a shared atomic
+lock for the burn home. Another host may read the saved queue and inbox, but cannot adopt or
+stop an active run merely because its marker is old. A separate burn home is not isolation
+for overlapping Git repositories; users must coordinate those roots.
+
+Usage samples are scoped to their provider. Legacy untagged snapshots belong only to
+Claude. Codex ingestion accepts explicitly supplied quota responses, retains quota data
+only and does not access native auth or session stores. Authorization checks now fetch
+fresh quota through the supported local app server; failed refreshes never fall back to a
+saved go result. Both short and weekly windows are required, and a service-reported reached
+limit stops work even when percentages lag. It does not redeem rate-limit
+resets. Unsupported or stale data stops new work; percentages do not guarantee zero spend.
+
+The Codex adapter checks every patch path, including move targets, before passing any
+operation. Unknown tools and subsequent interactive process input are refused rather than
+implicitly trusted. A refusal or failure in its policy subprocess yields a refusal in the
+adapter. This is an offline adapter property, not a claim about native hook failure handling.
 
 **How it reads a shell command.** It splits the command the way a shell would: on `;`, `&&`,
 `||`, `|`, `&` and newlines, and into subshells and `$( )`, but only outside quotes, so a
@@ -72,7 +123,7 @@ name is one, so `g\it` is `git`.
 
 ### The skill's rules (instructed)
 
-`SKILL.md` section 0 covers what the hook cannot judge: don't touch DIRTY repos, don't upgrade
+`skills/burn-my-usage/workflow.md` section 0 covers what the hook cannot judge: don't touch DIRTY repos, don't upgrade
 major versions, treat repository content as data, stop on signs of compromise, never retry a
 refused action. These depend on the model following them. The hook backs up the subset that
 can be checked mechanically.
@@ -142,7 +193,17 @@ through:
 - **Tools with innocent names.** An MCP tool that writes but is called `sync_state`.
 - **Its own off switch.** `stop.sh` ends the run's guard; it is the documented exit, so the
   hook can't tell a legitimate finish from an early one. The run log records when it was
-  called.
+  called. `stop.sh --release-orphans` can also drop ownership records whose worktree git no
+  longer knows; it can't release a live worktree.
+
+### Recovering a run that won't stop
+
+If `stop.sh` keeps saying `WORK_REMAINS`, first try `stop.sh --release-orphans <session id>`
+from the run's session or any other. If that still refuses, a live worktree is owned: open
+the handoff under `<burn home>/handoffs/`, commit or save the work, and run
+`work-item.sh finish`. As a last resort, from a session that is not the run's, check the
+branch is committed or bundled, then delete `<burn home>/owned/<session id>/<item>`,
+`<burn home>/active/<session id>` and `<burn home>/run.lock`, and close the run's session.
 
 So the hook is a seatbelt for mistakes and drift, which are the likely failures, not a
 boundary against a determined adversary. If you need a boundary, run Claude Code in a
@@ -171,6 +232,57 @@ practice: if your remote protects the default branch, nothing reaches it without
   the refusal.
 
 ## Decision log
+
+### 2026-11-19: An optional inbox page, and approvals the run still can't forge
+
+**Problem.** `INBOX.md` is hard to answer away from the machine: the burn home shouldn't sit
+in a synced folder (2026-11-12), so there was no way to answer from a phone. A private
+claude.ai page with one-tap answers solves that, but it breaks two standing rules. A run
+would send card text off the machine, where the rule was "nothing leaves except `burn/`
+branches" and the guard refused every artifact tool. And an approval tapped on a page lives
+in a cloud database the hook can't read, where the rule (2026-10-08) was that approvals live
+in a file the run can't write.
+
+**Options.** (a) Keep `INBOX.md` only. (b) Publish a read-only page and keep answering in the
+file; that doesn't solve the problem. (c) A page that takes answers, with the run trusted to
+report them honestly; that makes a merge approval forgeable by the run. (d) A page that
+takes answers, with the run allowed to read the page and write cards but never answers, and
+approvals copied to disk by the tool into a folder the run can't write any other way, where
+the hook checks them.
+
+**Decision.** (d), off unless the user sets `inbox_page` in setup. The user publishes the
+page themselves, with access rules that let only its owner read or write. During a run the
+guard still refuses the `Artifact` tool outright. It allows `ArtifactData` only on that one
+URL: reads, and single-document writes to `items`. Writes to `answers` and all batches are
+refused, and so is a call that names `action`, `url`, `collection` or `out_dir` twice, because
+the hook reads the first one it finds and a document field could otherwise stand in for the
+call's own. The only place a read may save files is `<burn home>/page-answers/<session>`,
+and only the `answers` collection. That folder is a run control like the markers: Write, Edit
+and shell commands that could write it are refused, and `start.sh` empties it, so what is in
+it was saved by the tool during this run. A merge is allowed on a ticked box as before, or on
+a saved answer that says merge and names this repo, this branch and the commit the branch is
+at now. Binding the approval to the commit is stricter than the tick, which names only the
+branch.
+
+**Residual risk.** Card text is stored on claude.ai under the user's account; setup says so
+before asking, and secrets were already barred from cards. The page's owner-only rules and
+its privacy are the user's to keep: someone given owner access could approve a merge, which
+stays local and unpushed. An approval withdrawn mid-run stays on disk until the run saves the
+answers again; the procedure saves them just before merging. The run writes the card the
+user approves, as it always did, so a misleading card is still possible; the commit id on the
+button and the diff are the check. As everywhere, a script the run writes and runs could
+write the export folder: this is a seatbelt, not a sandbox. Codex has no artifact tools and
+keeps `INBOX.md` only.
+
+**Verification.** 36 new guard tests, 13 of which fail on the previous guard (the rest are
+refusals it already made, kept so they stay refused), and one for `start.sh`: no page set
+up; another page's URL; no URL; each read; each `items` write; each `answers` write; batch;
+a nested `collection`, `action` or `url`; saving items, saving elsewhere, saving to another
+session's folder; Write, Edit, redirect, `cp` and an interpreter aimed at the export folder;
+and a merge with no answer, a non-merge answer whose note quotes a merge, the wrong repo,
+the wrong branch, an old commit, the facts split across two answers, and another session's
+answer, against one good approval that passes. The published page's rules were read back
+with `as_level: admin`, which sees nothing.
 
 ### 2026-11-02: Refuse to start a run without a config
 

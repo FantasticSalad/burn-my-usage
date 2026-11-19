@@ -29,7 +29,12 @@ home=${BURN_MY_USAGE_HOME:-$HOME/.burn-my-usage}
 re='"session_id"[[:space:]]*:[[:space:]]*"([A-Za-z0-9_-]+)"'
 [[ $input =~ $re ]] || exit 0
 session=${BASH_REMATCH[1]}
-[ -f "$home/active/$session" ] || exit 0
+case "${BMU_HOST:-claude-code}" in
+  claude-code) marker="$home/active/$session" ;;
+  codex) marker="$home/active/codex/$session" ;;
+  *) exit 1 ;;
+esac
+[ -f "$marker" ] || exit 0
 
 # --- from here on, a run is active in this session ---------------------------------------
 
@@ -72,13 +77,34 @@ norm() {
     p="${BASH_REMATCH[1]}:${BASH_REMATCH[2]:-/}"
   fi
   while [[ $p == *//* ]]; do p=${p//\/\//\/}; done
+  while [[ $p == */./* ]]; do p=${p//\/\.\//\/}; done
+  case "$p" in */.) p=${p%/.} ;; esac
   [ "$p" = / ] || p=${p%/}
   REPLY=$p
 }
 
+# REPLY = the word without its quotes. A quote inside the other kind is text, as in the shell:
+# "C:/Users/O'Brien/x" is C:/Users/O'Brien/x, not C:/Users/OBrien/x. Backslashes are left alone
+# (they are Windows separators as often as escapes); an escaped quote is dropped, as before.
 unquote() {
-  REPLY=${1//\"/}
-  REPLY=${REPLY//\'/}
+  case "$1" in
+    *\"*\'* | *\'*\"*) ;;
+    *) REPLY=${1//\"/}; REPLY=${REPLY//\'/}; return 0 ;;
+  esac
+  local s=$1 out="" q="" c i n=${#1}
+  for ((i = 0; i < n; i++)); do
+    c=${s:i:1}
+    if [ "$c" = "\\" ] && [ "$q" != "'" ]; then
+      case "${s:i+1:1}" in \" | \') out+=$c; i=$((i + 1)); continue ;; esac
+    fi
+    if [ -z "$q" ]; then
+      case "$c" in \" | \') q=$c; continue ;; esac
+    elif [ "$c" = "$q" ]; then
+      q=""; continue
+    fi
+    out+=$c
+  done
+  REPLY=$out
 }
 
 json_str tool_name
@@ -116,7 +142,8 @@ secret_path() {
     service-account*.json | service_account*.json) return 0 ;;
   esac
   case "/$p/" in
-    */.ssh/* | */.aws/* | */.gnupg/* | */.kube/* | */.docker/config.json/* | */.config/gh/*) return 0 ;;
+    */.ssh/* | */.aws/* | */.gnupg/* | */.kube/* | */.docker/config.json/* | */.config/gh/* | */.codex/auth.json/* | */.codex/.sandbox-secrets/* | */.codex/sessions/* | */.claude/.credentials.json/* | */.claude/.claude.json/* | */.claude/projects/*) return 0 ;;
+    */.codex/*.sqlite* | */.claude/history.jsonl/*) return 0 ;;
   esac
   return 1
 }
@@ -131,7 +158,7 @@ protected_path() {
     */.gitlab-ci.yml/* | */azure-pipelines.yml/* | */jenkinsfile/* | */bitbucket-pipelines.yml/*) return 0 ;;
   esac
   case "$p" in
-    "$home_n"/config.md | "$home_n"/guard-deny.txt | "$home_n"/guard-allow-mcp.txt | "$home_n"/roots.txt | "$home_n"/bin/* | "$home_n"/active/* | "$home_n"/owned/* | "$home_n"/usage.json | "$home_n"/guard.log) return 0 ;;
+    "$home_n"/config.md | "$home_n"/guard-deny.txt | "$home_n"/guard-allow-mcp.txt | "$home_n"/roots.txt | "$home_n"/bin | "$home_n"/bin/* | "$home_n"/active | "$home_n"/active/* | "$home_n"/owned | "$home_n"/owned/* | "$home_n"/run.lock | "$home_n"/run.lock/* | "$home_n"/usage | "$home_n"/usage/* | "$home_n"/usage.json | "$home_n"/guard.log | "$home_n"/burn-it-all | "$home_n"/burn-it-all/* | "$home_n"/page-answers | "$home_n"/page-answers/*) return 0 ;;
   esac
   return 1
 }
@@ -187,7 +214,9 @@ long_name() {
   REPLY=$long$rest
 }
 
-# When setup wrote roots.txt, edits must land under a root, the burn home or a temp dir.
+# Returns 0 (outside, so the caller refuses) unless the path is under a root in roots.txt, the
+# burn home or a temp dir. A missing or empty roots.txt leaves only the burn home and temp:
+# it fails closed. start.sh also refuses to start a run without a usable roots.txt.
 outside_roots() {
   norm "$1"
   local p=$REPLY r
@@ -266,9 +295,15 @@ check_file_tool() {
 
 # REPLY = the folder a word names, or "" when it can't be known before the command runs: a
 # command substitution, or a relative path from a folder that is itself unknown.
-resolve_dir() { # word, current dir
+resolve_dir() { # word as typed, current dir
   unquote "$1"
-  local d=$REPLY
+  resolve_path "$REPLY" "$2"
+}
+
+# Like resolve_dir, for a word already unquoted. Unquoting twice would drop quotes that are
+# part of the name: the apostrophe in "C:/Users/O'Brien" survives the first pass, not a second.
+resolve_path() { # unquoted word, current dir
+  local d=$1
   case "$d" in *"$subst"*) REPLY=""; return 0 ;; esac
   # The home folder written out, or $USERPROFILE, would otherwise resolve under the current folder.
   case "$d" in
@@ -324,6 +359,32 @@ merge_approved() {
     card && tolower($0) ~ /^[[:space:]]*\*\*reopened/ { ticked = 0 }
     card && tolower($0) ~ /^[[:space:]]*[-*][[:space:]]+\[x\][[:space:]]+(\*\*)?merge/ { ticked = 1 }
     END { if (card && ticked) found = 1; exit found ? 0 : 1 }' "$home/INBOX.md"
+}
+
+# The same approval given on the inbox page: an answer saved this session by ArtifactData into
+# <burn home>/page-answers/<session>/answers (a folder the run can't write any other way) that
+# says merge, names this repo and branch, and names the commit the branch is at now. An
+# approval of an earlier commit doesn't count.
+page_merge_approved() { # branch, repo, dir
+  local d="$home/page-answers/$session/answers" tip
+  [ -d "$d" ] || return 1
+  tip=$(git -C "$3" rev-parse --verify -q "refs/heads/$1^{commit}" 2>/dev/null) || return 1
+  [ -n "$tip" ] || return 1
+  find "$d" -type f -name '*.json' -exec awk -v b="$1" -v r="$2" -v t="$tip" '
+    function flush() { if (m && gb && gr && gt) print "approved" }
+    BEGIN { b = "\"branch\":\"" tolower(b) "\""; r = "\"repo\":\"" tolower(r) "\""; t = "\"tip\":\"" t "\"" }
+    FNR == 1 { flush(); m = gb = gr = gt = 0 }
+    {
+      s = $0
+      sub(/^[[:space:]]+/, "", s); sub(/,?[[:space:]]*$/, "", s)
+      sub(/"[[:space:]]*:[[:space:]]*"/, "\":\"", s)
+      l = tolower(s)
+      if (l == "\"action\":\"merge\"") m = 1
+      if (l == b) gb = 1
+      if (l == r) gr = 1
+      if (s == t) gt = 1
+    }
+    END { flush() }' {} + 2>/dev/null | grep -q approved
 }
 
 # A git switch or checkout earlier in the same command changes the branch later parts of the
@@ -405,6 +466,9 @@ require_burn_branch() {
   is_home_repo "$dir" && return 0
   br=$(branch_in "$dir")
   case "$br" in burn/*) return 0 ;; esac
+  # git -C "$W" commit: the hook sees the command before the shell expands $W, so the folder it
+  # judged doesn't exist. Say so, rather than blame the branch.
+  case "$dir" in *'$'*) deny "$what names its folder with a shell variable ($dir). The guard checks the command before variables expand, so it can't tell which branch that is. Write the path literally" ;; esac
   deny "$what is only allowed on a burn/ branch, and $dir is on ${br:-a detached HEAD or no repository}. Create a burn/<date>-<item> branch first"
 }
 
@@ -523,7 +587,7 @@ check_git() {
         continue
         ;;
       --git-dir=* | --work-tree=*)
-        resolve_dir "${a#*=}" "$dir"
+        resolve_path "${a#*=}" "$dir"
         dir=$REPLY
         shift
         continue
@@ -641,7 +705,8 @@ check_git() {
         case "$ref" in
           burn/*)
             merge_approved "$ref" "$(basename "${top:-$dir}")" ||
-              deny "merging $ref into ${br:-this branch} needs a ticked Merge on its card in INBOX.md, and there isn't one"
+              page_merge_approved "$ref" "$(basename "${top:-$dir}")" "$dir" ||
+              deny "merging $ref into ${br:-this branch} needs the user's approval: a ticked Merge on its card in INBOX.md, or an Approve on the inbox page for the commit the branch is at now, saved this run to page-answers. There isn't one"
             ;;
           *) deny "the only merges allowed onto a non-burn branch are burn/ branches the user approved in INBOX.md, and fast-forwards from the branch's own upstream" ;;
         esac
@@ -906,7 +971,7 @@ check_delete() {
         ;;
     esac
     targets=$((targets + 1))
-    resolve_dir "$t" "$dir"
+    resolve_path "$t" "$dir"
     norm "$REPLY"
     case "$REPLY" in
       */../* | */..) outside=1 ;;
@@ -1085,7 +1150,7 @@ skip_prefix() {
 
 check_segment() {
   # $1 = directory, $2 = one simple command
-  local dir=$1 w largs
+  local dir=$1 w largs a target
   set -- $2
   join_quoted "$@"
   set -- ${words[@]+"${words[@]}"}
@@ -1096,6 +1161,23 @@ check_segment() {
   w=$REPLY
   shift
   largs=" $* "
+  # Direct filesystem mutators must not change run controls. Resolve each argument against
+  # the command's working directory, so an unrelated project's config.md remains usable.
+  case "$w" in
+    cp | mv | rm | rmdir | del | erase | unlink | truncate | touch | install | chmod | tee | set-content | add-content | out-file | clear-content | remove-item | move-item | copy-item | rename-item | new-item)
+      for a in "$@"; do
+        unquote "$a"
+        case "$REPLY" in -*) continue ;; esac
+        resolve_path "$REPLY" "$dir"
+        target=$REPLY
+        [ -n "$target" ] || continue
+        norm "$target"
+        target=$REPLY
+        reject_parent_write "$target"
+        case "$target" in "$home_n"/*) protected_path "$target" && deny "the command changes a run control; use the run scripts to manage it" ;; esac
+      done
+      ;;
+  esac
   case "$w" in
     sudo | doas | su | runas) deny "$w runs as another user" ;;
     git) check_git "$dir" "$@" ;;
@@ -1209,9 +1291,14 @@ check_shell() {
   # Reading the inbox or the guard's files from the shell is harmless; writing them is not.
   # Anything that names one of them and could write (a redirect into it, a file-moving tool,
   # an interpreter, or a git command that rewrites files) is refused.
+  # BURN IT ALL is armed only by the user typing it (burn-it-all.sh, a UserPromptSubmit hook).
+  # The run can't run that hook itself with a made-up message, or touch its folder at all.
   case "$cmd" in
-    *inbox.md* | *burn-my-usage/active* | *burn-my-usage\\active* | *"$home"/active* | *"$home_n"/active* | *guard.log* | *guard-deny.txt* | *guard-allow-mcp.txt* | *roots.txt*)
-      re='>[[:space:]]*["'"'"']?[^[:space:]]*(inbox\.md|/active|\\active|guard\.log|guard-deny\.txt|guard-allow-mcp\.txt|roots\.txt)'
+    *burn-it-all*) deny "only the user can arm BURN IT ALL, by typing it; a run never runs or changes it" ;;
+  esac
+  case "$cmd" in
+    *inbox.md* | *burn-my-usage/active* | *burn-my-usage\\active* | *"$home"/active* | *"$home_n"/active* | *run.lock* | *codex.json* | *guard.log* | *guard-deny.txt* | *guard-allow-mcp.txt* | *roots.txt* | *page-answers*)
+      re='>[[:space:]]*["'"'"']?[^[:space:]]*(inbox\.md|/active|\\active|run\.lock|codex\.json|guard\.log|guard-deny\.txt|guard-allow-mcp\.txt|roots\.txt|page-answers)'
       [[ $cmd =~ $re ]] && deny "INBOX.md, the run markers and the guard's files are never written from the shell. Edit the inbox with the Edit tool; the run ends with stop.sh"
       re='(^|[^a-z0-9_.-])(tee|mv|cp|rm|rmdir|del|erase|truncate|dd|ln|touch|install|chmod|unlink|shred|set-content|add-content|out-file|clear-content|remove-item|move-item|copy-item|rename-item|new-item|python3?|py|node|deno|bun|ruby|perl|php|awk|gawk)([^a-z0-9_-]|$)|sed[^|;&]*[[:space:]]-[a-z]*i|git[[:space:]][^|;&]*(checkout|restore|reset|stash|rm|mv|clean|apply)'
       [[ $cmd =~ $re ]] && deny "INBOX.md, the run markers and the guard's files are never changed from the shell. Read them with Read, edit the inbox with Edit; the run ends with stop.sh"
@@ -1220,7 +1307,7 @@ check_shell() {
   case "$cmd" in
     *.claude/settings* | *.claude\\settings* | *.git/hooks* | *.git\\hooks* | *core.hookspath*)
       deny "the command touches Claude Code settings or git hooks" ;;
-    *"gh auth token"* | *"git credential"* | *"auth print-access-token"* | *"configure get"* | *.git-credentials*)
+    *"gh auth token"* | *"git credential"* | *"auth print-access-token"* | *"configure get"* | *.git-credentials* | *.codex/auth.json* | *.codex\\auth.json* | *.codex/sessions* | *.codex\\sessions* | *.codex/.sandbox-secrets* | *.codex\\.sandbox-secrets* | *.codex/*.sqlite* | *.codex\\*.sqlite* | *.claude/.credentials.json* | *.claude\\.credentials.json* | *.claude/.claude.json* | *.claude\\.claude.json* | *.claude/projects* | *.claude\\projects* | *.claude/history.jsonl* | *.claude\\history.jsonl*)
       deny "the command reads stored credentials" ;;
   esac
   re='(curl|wget|iwr|invoke-webrequest|irm|invoke-restmethod)[^|]*\|[[:space:]]*(sudo[[:space:]]+)?((ba|z|da|k)?sh|iex|invoke-expression|python3?|node|perl|ruby)([[:space:]]|$)'
@@ -1454,9 +1541,12 @@ check_redirects() {
 
 # $1 = directory, $2 = 1 to skip quoted text, then the words. REPLY = a quote left open, if any.
 scan_redirects() {
-  local dir=$1 quoted=$2 a t target next=0 q=""
+  local dir=$1 quoted=$2 a t first tq target next=0 q="" i=0 j n
   shift 2
-  for a in "$@"; do
+  local ws=("$@")
+  n=${#ws[@]}
+  for ((i = 0; i < n; i++)); do
+    a=${ws[i]}
     if [ -n "$q" ]; then
       odd_quote "$a" "$q"
       [ -n "$REPLY" ] && q=""
@@ -1484,22 +1574,52 @@ scan_redirects() {
       q=$REPLY
     fi
     [ -n "$t" ] || continue
-    unquote "$t"
-    t=$REPLY
-    case "$t" in "&"* | /dev/null | /dev/stdout | /dev/stderr | nul | NUL | '$null') continue ;; esac
-    resolve_dir "$t" "$dir"
-    # A target named by a command substitution can't be known in advance, like one in a variable.
-    [ -n "$REPLY" ] || continue
-    target=$REPLY
-    reject_parent_write "$target"
-    cost_gate
-    protect_checkout "$target"
-    outside_roots "$target" && deny "the redirect writes $t, outside the folders this run may change (roots.txt in the burn home)"
-    protected_path "$target" && deny "the redirect writes $t, which is agent, CI or git configuration or one of the run's own controls"
-    long_name "$target"
-    [ -n "$REPLY" ] && protected_path "$REPLY" && deny "the redirect writes $t, which is agent, CI or git configuration or one of the run's own controls"
+    # The words were split on spaces, so a quoted target with a space in it ("C:/Users/A B/x")
+    # spans several. Check the whole path, not its first word: that refused good paths and
+    # missed protected files below a folder with a space.
+    first=$t
+    odd_quote "$t" ""
+    tq=$REPLY
+    if [ -n "$tq" ]; then
+      j=$i
+      while [ -n "$tq" ] && [ $((j + 1)) -lt "$n" ]; do
+        j=$((j + 1))
+        t="$t ${ws[j]}"
+        odd_quote "${ws[j]}" "$tq"
+        [ -n "$REPLY" ] && tq=""
+      done
+      # The words up to the closing quote are the target, not more redirections. The second
+      # pass (quotes didn't balance) still looks at every word, as it always has.
+      if [ "$quoted" = 1 ]; then
+        i=$j
+        q=""
+      fi
+      # Quotes that never close mean the split went wrong: check the first word as well.
+      [ -z "$tq" ] || redirect_target "$dir" "$first"
+    fi
+    redirect_target "$dir" "$t"
   done
   REPLY=$q
+  return 0
+}
+
+# Refuses one redirect target that writes outside the allowed folders. $1 = directory, $2 = word.
+redirect_target() {
+  local t target
+  unquote "$2"
+  t=$REPLY
+  case "$t" in "&"* | /dev/null | /dev/stdout | /dev/stderr | nul | NUL | '$null') return 0 ;; esac
+  resolve_path "$t" "$1"
+  # A target named by a command substitution can't be known in advance, like one in a variable.
+  [ -n "$REPLY" ] || return 0
+  target=$REPLY
+  reject_parent_write "$target"
+  cost_gate
+  protect_checkout "$target"
+  outside_roots "$target" && deny "the redirect writes $t, outside the folders this run may change (roots.txt in the burn home)"
+  protected_path "$target" && deny "the redirect writes $t, which is agent, CI or git configuration or one of the run's own controls"
+  long_name "$target"
+  [ -n "$REPLY" ] && protected_path "$REPLY" && deny "the redirect writes $t, which is agent, CI or git configuration or one of the run's own controls"
   return 0
 }
 
@@ -1569,6 +1689,69 @@ check_text() {
   done
 }
 
+# --- the configured inbox page (ArtifactData only) -----------------------------------------
+
+# The one exception to "nothing leaves the machine except burn/ branches" (workflow.md
+# section 0): a run may read the inbox page the user published in setup (config.md
+# `inbox_page`) and write its `items` collection, one document at a time. The page is the
+# user's own private artifact and holds the card text INBOX.md already allows. A run never
+# writes `answers` (only the user's taps do), never batches, never touches another artifact,
+# and the Artifact tool itself (publish, read, delete, pin...) stays refused.
+#
+# The only place a read may save files is <burn home>/page-answers/<session>, and only for
+# `answers`. That folder is a run control: file tools and the shell can't write it, so what
+# is in it came from the page. page_merge_approved reads merge approvals from it.
+#
+# json_str reads the first "action", "url", "collection" or "out_dir" anywhere in the hook
+# input, so a call that carries any of those keys twice (a document with a field of that
+# name) is refused: the guard could be reading the document's value instead of the call's.
+
+# True when the key appears at most once in the hook input.
+key_once() {
+  local re="\"$1\"[[:space:]]*:" rest=$input n=0
+  while [[ $rest =~ $re ]]; do
+    n=$((n + 1))
+    [ "$n" -gt 1 ] && return 1
+    rest=${rest#*"${BASH_REMATCH[0]}"}
+  done
+  return 0
+}
+
+check_artifact_data() {
+  local k act aurl coll out page
+  for k in action url collection out_dir; do
+    key_once "$k" || deny "this ArtifactData call names \"$k\" more than once, so it can't be checked. Inbox items never use a field called action, url, collection or out_dir"
+  done
+  json_str action
+  act=$REPLY
+  json_str url
+  aurl=$REPLY
+  json_str collection
+  coll=$REPLY
+  json_str out_dir
+  out=$REPLY
+  . "$(dirname "$0")/lib.sh"
+  page=$(config_value inbox_page "")
+  [ -n "$page" ] || deny "no inbox page is set up (inbox_page in config.md), so a run uses INBOX.md only"
+  [ "$aurl" = "$page" ] || deny "a run may only read or write its own inbox page, the inbox_page in config.md"
+  if [ -n "$out" ]; then
+    norm "$out"
+    case "$act" in get | list | query) ;; *) deny "out_dir is only for reading answers" ;; esac
+    [ "$coll" = answers ] || deny "only the answers collection is saved to disk; read items without out_dir"
+    [[ $REPLY == "$home_n/page-answers/$session" ]] || deny "answers are saved only to $home_n/page-answers/$session"
+    return 0
+  fi
+  case "$act" in
+    get | list | query) return 0 ;;
+    set | update | str_replace | delete)
+      [ "$coll" = items ] || deny "a run writes only the items collection. Answers are the user's taps and are never written, changed or deleted by a run"
+      return 0
+      ;;
+    batch) deny "write inbox items one at a time; a batch can't be checked" ;;
+    *) deny "a run doesn't use ArtifactData ${act:-with no action}" ;;
+  esac
+}
+
 # --- dispatch -----------------------------------------------------------------------------
 
 case "$tool" in
@@ -1576,7 +1759,8 @@ case "$tool" in
   Read | Edit | Write | MultiEdit | NotebookEdit | Grep | Glob) check_file_tool ;;
   AskUserQuestion | ExitPlanMode)
     deny "the user is away. Write the question into INBOX.md as a card with options and a recommendation, then carry on with other work" ;;
-  SendMessage | RemoteTrigger | CronCreate | CronDelete | Artifact | ArtifactData | ArtifactComments | DesignSync)
+  ArtifactData) check_artifact_data ;;
+  SendMessage | RemoteTrigger | CronCreate | CronDelete | Artifact | ArtifactComments | DesignSync)
     deny "$tool acts outside this machine or schedules more work; a burn run only changes local repos and pushes burn/ branches" ;;
   mcp__*)
     if [ -f "$home/guard-allow-mcp.txt" ]; then

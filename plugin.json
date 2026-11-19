@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "burn-my-usage",
+  "version": "0.2.6",
+  "description": "Experimental Codex package for review-ready repository work. Native unattended runtime acceptance is pending.",
+  "author": { "name": "FantasticSalad" },
+  "license": "MIT",
+  "extensions": { "com.openai": { "hooks": "./hooks/codex.json" } }
+}

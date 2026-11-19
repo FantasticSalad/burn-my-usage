@@ -9,6 +9,8 @@ Every run reads this. Edit it freely; a run never changes it (the guard refuses)
 - push_branches: never        # private (only to private GitHub repos), all, or never
 - max_open_branches: 3          # per repo: no new branch while this many await your answer
 - require_guard: yes            # yes: if the guard isn't running, a run only writes briefs
+- codex_bash:                   # Windows Codex package: absolute installed Git Bash path; BMU_BASH overrides it
+- inbox_page:                   # your private inbox page on claude.ai, set by /burn-my-usage setup; empty: INBOX.md only
 - ideas: yes                    # finish an emptied queue with a batch of ideas in ideas.md
 - issues: off                   # on: also work open issues with burn_label, by you or trusted authors
 - burn_label: burn-ok

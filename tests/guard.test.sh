@@ -630,6 +630,72 @@ check deny "MultiEdit ticks a box" "$(tool_json MultiEdit "$(multiedit_json "$in
 # --- other tools -----------------------------------------------------------------------------
 check deny "AskUserQuestion" "$(tool_json AskUserQuestion '{"questions":[]}')"
 check deny "Artifact" "$(tool_json Artifact '{"action":"publish"}')"
+
+# --- the inbox page: ArtifactData on the configured page only -------------------------------
+page=https://claude.ai/artifact/synthetic-inbox
+ad() { tool_json ArtifactData "{$1,\"url\":\"${2:-$page}\"}"; }
+check deny "ArtifactData with no inbox page set up" "$(ad '"action":"list","collection":"items"')"
+printf 'push_branches: all\ninbox_page: %s\n' "$page" >"$home/config.md"
+check deny "Artifact publish stays refused with a page set up" "$(tool_json Artifact "{\"action\":\"publish\",\"url\":\"$page\"}")"
+check deny "ArtifactData on another artifact" "$(ad '"action":"list","collection":"items"' https://claude.ai/artifact/someone-elses)"
+check deny "ArtifactData with no url" "$(tool_json ArtifactData '{"action":"list","collection":"items"}')"
+check allow "ArtifactData list items" "$(ad '"action":"list","collection":"items"')"
+check allow "ArtifactData get an item" "$(ad '"action":"get","collection":"items","doc_id":"d1"')"
+check allow "ArtifactData list answers" "$(ad '"action":"list","collection":"answers"')"
+check allow "ArtifactData set an item" "$(ad '"action":"set","collection":"items","doc_id":"d1","data":{"title":"x","kind":"job"}')"
+check allow "ArtifactData update an item" "$(ad '"action":"update","collection":"items","doc_id":"d1","data":{"state":"done"}')"
+check allow "ArtifactData delete an item" "$(ad '"action":"delete","collection":"items","doc_id":"d1"')"
+check deny "ArtifactData set an answer" "$(ad '"action":"set","collection":"answers","doc_id":"d1","data":{"kind":"branch"}')"
+check deny "ArtifactData delete an answer" "$(ad '"action":"delete","collection":"answers","doc_id":"d1"')"
+check deny "ArtifactData write with no collection" "$(ad '"action":"set","doc_id":"d1","data":{}')"
+check deny "ArtifactData batch" "$(ad '"action":"batch","writes":[{"op":"set","collection":"items","doc_id":"d1","data":{}}]')"
+check deny "ArtifactData profiles" "$(ad '"action":"profiles","ids":["u_x"]')"
+# A document field named like one of the call's own fields could be read in its place.
+check deny "ArtifactData answer hidden behind a nested collection" "$(ad '"action":"set","data":{"collection":"items"},"collection":"answers","doc_id":"d1"')"
+check deny "ArtifactData nested action" "$(ad '"action":"set","collection":"items","doc_id":"d1","data":{"action":"merge"}')"
+check deny "ArtifactData nested url" "$(ad '"action":"set","collection":"items","doc_id":"d1","data":{"images":[{"url":"https://example.com/a.png"}]}')"
+# Answers are saved to one folder only, and nothing else can write it.
+exp="$home/page-answers/$sid"
+check allow "ArtifactData saves answers to the run's export folder" "$(ad "\"action\":\"list\",\"collection\":\"answers\",\"out_dir\":\"$(esc "$exp")\"")"
+check deny "ArtifactData saves items to the export folder" "$(ad "\"action\":\"list\",\"collection\":\"items\",\"out_dir\":\"$(esc "$exp")\"")"
+check deny "ArtifactData saves answers elsewhere" "$(ad "\"action\":\"list\",\"collection\":\"answers\",\"out_dir\":\"$(esc "$app")\"")"
+check deny "ArtifactData saves answers to another session's folder" "$(ad "\"action\":\"list\",\"collection\":\"answers\",\"out_dir\":\"$(esc "$home/page-answers/other")\"")"
+check deny "Write into the export folder" "$(tool_json Write "$(write_json "$exp/answers/br-app-page.json" '{}')")"
+check deny "Edit in the export folder" "$(tool_json Edit "$(edit_json "$exp/answers/br-app-page.json" a b)")"
+deny "echo x > $exp/answers/br-app-page.json"
+deny "cp $tmp/fake.json $exp/answers/br-app-page.json"
+deny "mkdir -p $exp/answers && python -c 'open(1)' $exp/answers/x.json"
+allow "ls $exp"
+# A merge approved on the page: the saved answer must name this repo, this branch and the
+# commit the branch is at now.
+g -C "$app" branch -q burn/2026-10-08-page
+ptip=$(g -C "$app" rev-parse burn/2026-10-08-page)
+mkdir -p "$exp/answers"
+answer() { # file, action, repo, branch, tip
+  printf '{\n  "action": "%s",\n  "at": "2026-10-08T01:00:00.000Z",\n  "branch": "%s",\n  "item": "br-app-page",\n  "kind": "branch",\n  "note": "\\"action\\": \\"merge\\"",\n  "repo": "%s",\n  "tip": "%s"\n}\n' "$2" "$4" "$3" "$5" >"$exp/answers/$1.json"
+}
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+answer br-app-page changes app burn/2026-10-08-page "$ptip"
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+answer br-app-page merge lib burn/2026-10-08-page "$ptip"
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+answer br-app-page merge app burn/2026-10-08-other "$ptip"
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+answer br-app-page merge app burn/2026-10-08-page 0000000000000000000000000000000000000000
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+answer br-app-page merge app burn/2026-10-08-page "$ptip"
+allow 'git merge --no-ff burn/2026-10-08-page' "$app"
+# Each fact must come from the same answer, and an answer saved by another session doesn't count.
+answer br-app-page changes app burn/2026-10-08-page "$ptip"
+answer br-app-other merge app burn/2026-10-08-other "$ptip"
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+rm -r "$exp"
+mkdir -p "$home/page-answers/other/answers"
+exp="$home/page-answers/other"
+answer br-app-page merge app burn/2026-10-08-page "$ptip"
+deny 'git merge --no-ff burn/2026-10-08-page' "$app"
+rm -r "$home/page-answers"
+printf 'push_branches: all\n' >"$home/config.md"
 check deny "MCP send" "$(tool_json mcp__claude_ai_Gmail__send_message '{}')"
 check deny "MCP create draft" "$(tool_json mcp__claude_ai_Gmail__create_draft '{}')"
 check allow "MCP search" "$(tool_json mcp__claude_ai_Gmail__search_threads '{}')"

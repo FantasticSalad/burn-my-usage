@@ -26,6 +26,18 @@ jobs:
       - name: tests
         shell: bash
         run: bash tests/run-all.sh
+      # Windows profile folders often have a space and an apostrophe, and Git Bash then stops
+      # converting paths for git and Node. Run the suite again from such a folder. Windows only:
+      # the conversion problem doesn't exist elsewhere, and a second macOS run is costly.
+      - name: tests from a path with a space and an apostrophe
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          odd="$RUNNER_TEMP/o'brien dir"
+          mkdir -p "$odd"
+          cp -R . "$odd/bmu"
+          cd "$odd/bmu"
+          bash tests/run-all.sh
       - name: trace guard cases after a failure
         if: failure()
         shell: bash

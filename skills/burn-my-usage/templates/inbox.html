@@ -1,0 +1,799 @@
+<title>Burn My Usage Inbox</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one phone-first column; a sticky counter bar of six queues; cards answer in place.
+   One light look on purpose: every colour is set here, and there are no dark blocks. */
+:root {
+  --bg: #F1F2F4;
+  --surface: #FFFFFF;
+  --chip: #E9ECF0;
+  --ink: #15171C;
+  --on-ink: #FFFFFF;
+  --muted: #5B616D;
+  --line: #D8DCE2;
+  --accent: #2350C4;
+  --mark: #FFE36A;
+  --ok: #1C7A4A;   --ok-bg: #E2F2E9;
+  --bad: #B42318;  --bad-bg: #FBE8E6;
+  --wait: #8F5500; --wait-bg: #FAEFD9;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap {
+  max-width: 720px; margin: 0 auto; padding-block: 20px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+header.top { display: grid; gap: 4px; padding-bottom: 12px; }
+h1 { font: 600 26px/1.15 var(--display); letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.summary { margin: 0; color: var(--muted); font-size: 14px; }
+
+.tabs {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  display: grid; grid-template-columns: repeat(6, minmax(min-content, 1fr)); gap: 4px;
+  background: var(--bg); padding-block: 8px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  display: grid; justify-items: center; gap: 2px; padding: 6px 2px 7px;
+  border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted);
+  font: inherit; cursor: pointer; min-width: 0;
+}
+.tab .n { font: 600 22px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.tab .l { font: 500 11px/1.2 var(--body); letter-spacing: 0.06em; text-transform: uppercase; }
+.tab[aria-selected="true"] { background: var(--surface); border-color: var(--line); color: var(--ink); }
+.tab .n.zero { color: var(--muted); font-weight: 500; }
+@media (max-width: 480px) {
+  .tabs { gap: 2px; }
+  .tab .l { font-size: 10px; letter-spacing: 0; }
+}
+
+main { display: grid; gap: 22px; }
+section.group { display: grid; gap: 10px; }
+.group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding-top: 6px; }
+.group-head h2 { font: 600 15px/1.3 var(--display); letter-spacing: 0.04em; text-transform: uppercase; margin: 0; }
+.group-head .hint { color: var(--muted); font-size: 13px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px 16px; display: grid; gap: 10px; min-width: 0;
+}
+.card.quiet { background: transparent; }
+.card h3 { font: 600 17px/1.3 var(--body); margin: 0; text-wrap: balance; }
+.card p { margin: 0; }
+.card .q { font-size: 15px; }
+.prose { display: grid; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+code { font: 0.9em/1.4 var(--mono); background: var(--chip); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: 500 12px/1 var(--mono); padding: 4px 6px; border-radius: 4px;
+  background: var(--chip); color: var(--muted); white-space: nowrap;
+}
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.wait { background: var(--wait-bg); color: var(--wait); }
+
+.eyebrow { font: 500 11px/1.2 var(--body); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.rec { display: grid; gap: 3px; }
+.rec mark, .opt.is-rec .opt-label mark {
+  background: linear-gradient(transparent 38%, var(--mark) 38%, var(--mark) 86%, transparent 86%);
+  color: inherit; padding: 0 2px; margin: 0 -2px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.rec .rec-label { font-weight: 600; }
+
+.fields { display: grid; gap: 10px; }
+.field { display: grid; gap: 2px; min-width: 0; }
+.field ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.branch-name { font: 500 13px/1.4 var(--mono); overflow-wrap: anywhere; color: var(--muted); }
+
+.opts { display: grid; gap: 8px; }
+.opt {
+  display: grid; gap: 2px; text-align: left; width: 100%;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  padding: 10px 12px; font: inherit; color: inherit; cursor: pointer;
+}
+.opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.opt-label { font-weight: 600; }
+.opt-tag { font: 500 11px/1.2 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn {
+  font: 600 14px/1.2 var(--body); min-height: 44px; padding: 10px 14px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.btn.ok { background: var(--ok); border-color: var(--ok); color: var(--on-ink); }
+.btn.danger { color: var(--bad); }
+.btn.link { border-color: transparent; background: none; color: var(--accent); padding-inline: 6px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .opt:focus-visible, .tab:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+label.note { display: grid; gap: 4px; }
+textarea {
+  font: inherit; width: 100%; min-height: 64px; resize: vertical; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--ink);
+}
+.err { color: var(--bad); font-size: 13px; }
+.confirm { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--bad-bg); }
+
+.answered { display: grid; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--ok-bg); }
+.answered.deferred { background: var(--wait-bg); }
+.answered .what { font-weight: 600; }
+.answered .actions { gap: 4px; }
+
+a { color: var(--accent); }
+.src { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.shots { display: grid; gap: 8px; }
+.shots figure { margin: 0; display: grid; gap: 4px; }
+.shots img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; }
+.empty strong { display: block; color: var(--ink); font: 600 16px/1.3 var(--display); margin-bottom: 4px; }
+
+footer.how { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+footer.how p { margin: 0; max-width: 65ch; }
+.cmds { display: grid; gap: 10px; margin-top: 18px; color: var(--ink); }
+.cmds > h2 { font: 600 15px/1.3 var(--display); letter-spacing: 0.04em; text-transform: uppercase; margin: 0; }
+.cmd-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.cmd { display: grid; grid-template-columns: minmax(0, 1fr) 40px; gap: 10px; align-items: center; padding: 10px 8px 10px 14px; }
+.cmd + .cmd { border-top: 1px solid var(--line); }
+.cmd .say { min-width: 0; display: grid; gap: 3px; }
+.cmd .phrase { font: 500 14px/1.35 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.cmd .what { font-size: 13px; line-height: 1.4; color: var(--muted); }
+.cmd .what b { font-weight: 600; color: var(--ink); }
+.cmd .copy { width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.cmd .copy:hover { background: var(--chip); color: var(--ink); }
+.cmd .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cmd .copy svg { width: 18px; height: 18px; }
+
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 10;
+  max-width: calc(100% - 32px); background: var(--ink); color: var(--on-ink);
+  padding: 10px 14px; border-radius: 8px; font-size: 14px; box-shadow: 0 4px 16px rgba(21, 23, 28, 0.25);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: border-color 120ms ease; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Burn My Usage Inbox</h1>
+    <p id="summary" class="summary">Loading your inbox…</p>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Queues"></nav>
+  <main id="view" aria-live="polite"></main>
+  <footer class="how">
+    <p><strong>How this works.</strong> Your answers save the moment you tap. The next run reads them before it does anything else, acts on them in your repos and refills this inbox.</p>
+    <p>Approving a branch approves the exact commit shown on its card. The next run merges it into your local default branch after the tests pass. Nothing is pushed to a default branch, deployed or published from here or by a run.</p>
+    <p>Deferred items come back on the next run. Ideas wait for as long as you like: Yes queues one for the next run, Later keeps it at the bottom of the Ideas tab, and No closes it. Only you can open or answer this inbox.</p>
+    <section class="cmds" aria-labelledby="cmds-h">
+      <h2 id="cmds-h">Things you can type in Claude Code</h2>
+      <ul class="cmd-list">
+        <li class="cmd"><div class="say"><span class="phrase">/burn-my-usage</span><span class="what">A full run: acts on your answers, merges what you approved, works the queue and refills this inbox. <b>Never deploys or pushes a default branch.</b></span></div><button class="copy" type="button" data-say="/burn-my-usage" aria-label="Copy /burn-my-usage"></button></li>
+        <li class="cmd"><div class="say"><span class="phrase">/burn-my-usage inbox</span><span class="what">Record your answers now. No building and no merges; those wait for the next full run.</span></div><button class="copy" type="button" data-say="/burn-my-usage inbox" aria-label="Copy /burn-my-usage inbox"></button></li>
+        <li class="cmd"><div class="say"><span class="phrase">/burn-my-usage plan</span><span class="what">A dry run: shows what the next run would work on and changes nothing.</span></div><button class="copy" type="button" data-say="/burn-my-usage plan" aria-label="Copy /burn-my-usage plan"></button></li>
+        <li class="cmd"><div class="say"><span class="phrase">/burn-my-usage status</span><span class="what">Usage so far this week, open branches and what's waiting here.</span></div><button class="copy" type="button" data-say="/burn-my-usage status" aria-label="Copy /burn-my-usage status"></button></li>
+        <li class="cmd"><div class="say"><span class="phrase">/burn-my-usage stop</span><span class="what">End the run in that session and report what was left mid-flight.</span></div><button class="copy" type="button" data-say="/burn-my-usage stop" aria-label="Copy /burn-my-usage stop"></button></li>
+        <li class="cmd"><div class="say"><span class="phrase">BURN IT ALL</span><span class="what">Typed exactly like that, in the run's session: that run, or the next one started there within the hour, goes to <b>100% of your weekly limit</b> instead of your stop line. Turn paid extra usage off first. Only you can arm it.</span></div><button class="copy" type="button" data-say="BURN IT ALL" aria-label="Copy BURN IT ALL"></button></li>
+        <li class="cmd"><div class="say"><span class="phrase">/burn-my-usage setup</span><span class="what">First-time setup, or fill in what's missing: repos, stop line, push policy, this page. It asks before changing anything.</span></div><button class="copy" type="button" data-say="/burn-my-usage setup" aria-label="Copy /burn-my-usage setup"></button></li>
+      </ul>
+    </section>
+  </footer>
+</div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const TABS = [
+    { id: "decide", label: "Decide" },
+    { id: "review", label: "Review" },
+    { id: "jobs", label: "Jobs" },
+    { id: "ideas", label: "Ideas" },
+    { id: "deferred", label: "Deferred" },
+    { id: "done", label: "Done" },
+  ];
+  const KIND_TAB = { decision: "decide", branch: "review", job: "jobs", idea: "ideas" };
+  const EFFORT = {
+    quick: { label: "Quick calls", hint: "under a minute each", min: 1 },
+    short: { label: "Short reads", hint: "about five minutes each", min: 5 },
+    think: { label: "Needs thinking", hint: "set some time aside", min: 15 },
+  };
+  const PRIORITY = { high: 0, normal: 1, low: 2 };
+
+  const S = {
+    status: "loading",            // loading | ready | nodb | private | error
+    items: new Map(),
+    answers: new Map(),
+    gotItems: false,
+    gotAnswers: false,
+    tab: readTab(),
+    open: new Set(),              // cards showing their full option list
+    draft: new Map(),             // id -> { option, note }
+    confirm: null,                // "id:action" awaiting a second tap
+    error: null,                  // { id, msg }
+    busy: new Set(),
+  };
+  let db = null;
+
+  // ---------- small helpers ----------
+  function readTab() {
+    try { const t = localStorage.getItem("burn-inbox.tab"); if (TABS.some(x => x.id === t)) return t; } catch (e) {}
+    return "decide";
+  }
+  function saveTab(t) { try { localStorage.setItem("burn-inbox.tab", t); } catch (e) {} }
+
+  function h(tag, props, ...kids) {
+    const el = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k === "text") el.textContent = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : String(v));
+    }
+    return add(el, ...kids);
+  }
+  // Element.append turns null into the text "null", so optional parts go through here.
+  function add(el, ...kids) {
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+    return el;
+  }
+  // Plain text with `code` spans and line breaks. Everything goes in as text nodes: items are
+  // written by a run from repo content, so nothing in them is ever treated as markup.
+  function inline(s) {
+    const out = [];
+    String(s ?? "").split("\n").forEach((line, li) => {
+      if (li) out.push(document.createElement("br"));
+      line.split("`").forEach((part, i) => {
+        if (!part) return;
+        out.push(i % 2 ? h("code", { text: part }) : document.createTextNode(part));
+      });
+    });
+    return out;
+  }
+  function prose(s, cls) {
+    if (!s) return null;
+    const box = h("div", { class: "prose" + (cls ? " " + cls : "") });
+    String(s).split(/\n{2,}/).forEach(p => box.append(h("p", null, ...inline(p))));
+    return box;
+  }
+  function safeUrl(u) {
+    return typeof u === "string" && (/^https:\/\//i.test(u) || /^\/_blob\/[A-Za-z0-9]+$/.test(u)) ? u : null;
+  }
+  function parseDay(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+  function today() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function niceDay(s) {
+    const d = parseDay(s);
+    return d ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "";
+  }
+  function waiting(found) {
+    const d = parseDay(found); if (!d) return null;
+    const n = Math.round((today() - d) / 86400000);
+    return n <= 0 ? "new today" : n === 1 ? "waiting 1 day" : "waiting " + n + " days";
+  }
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { t.hidden = true; }, 3200);
+  }
+  function draftOf(id) {
+    if (!S.draft.has(id)) S.draft.set(id, { option: null, note: "" });
+    return S.draft.get(id);
+  }
+  function byPriorityThenAge(a, b) {
+    const pa = PRIORITY[a[1].priority] ?? 1, pb = PRIORITY[b[1].priority] ?? 1;
+    if (pa !== pb) return pa - pb;
+    const fa = String(a[1].found || ""), fb = String(b[1].found || "");
+    if (fa !== fb) return fa < fb ? -1 : 1;
+    return String(a[1].title || "").localeCompare(String(b[1].title || ""));
+  }
+  function byNewest(a, b) {
+    const fa = String(a[1].found || ""), fb = String(b[1].found || "");
+    if (fa !== fb) return fa < fb ? 1 : -1;
+    return String(a[1].title || "").localeCompare(String(b[1].title || ""));
+  }
+  function shortSha(s) { return /^[0-9a-f]{7,40}$/i.test(String(s || "")) ? String(s).slice(0, 7) : null; }
+
+  // ---------- where each item sits ----------
+  // An answer counts only if it is newer than the item's last reopening (a deferral coming
+  // back, or a branch fixed after "needs changes"), and, for a branch, only while the branch
+  // is still at the commit that was approved.
+  function answerFor(id, it) {
+    const a = S.answers.get(id);
+    if (!a || !a.at || !a.action) return null;
+    if (it.reopenedAt && Date.parse(a.at) <= Date.parse(it.reopenedAt)) return null;
+    if (it.kind === "branch" && a.action === "merge" && it.tip && a.tip !== it.tip) return null;
+    return a;
+  }
+  function place(id, it) {
+    if (it.state === "done" || it.state === "dropped") return { tab: "done", a: null };
+    const a = answerFor(id, it);
+    if (a && a.action === "later") return { tab: "ideas", a, later: true };
+    if (a && a.action === "defer") return { tab: "deferred", a };
+    return { tab: KIND_TAB[it.kind] || "decide", a };
+  }
+  function answerText(it, a) {
+    switch (a.action) {
+      case "choose": {
+        const o = (it.options || []).find(x => x.id === a.option);
+        return o ? o.label : "Option " + a.option;
+      }
+      case "defer": return "Deferred to the next run";
+      case "drop": return it.kind === "job" ? "Dropped: not doing this" : "Dropped";
+      case "merge": return "Approved to merge" + (shortSha(a.tip) ? " at " + shortSha(a.tip) : "");
+      case "changes": return "Needs changes";
+      case "bin": return "Bin the branch";
+      case "done": return "Done";
+      case "yes": {
+        const o = (it.options || []).find(x => x.id === a.option);
+        return o ? "Yes: " + o.label : "Yes";
+      }
+      case "later": return "Later";
+      case "no": return "No";
+      default: return a.action;
+    }
+  }
+
+  // ---------- writes ----------
+  // One answer document per item, with the same id. A merge approval also records the repo,
+  // the branch and the commit that were on the card when it was tapped: the run's guard only
+  // lets a merge through when all three still match.
+  async function act(id, it, action, extra) {
+    if (!db || S.busy.has(id)) return;
+    const d = draftOf(id);
+    const body = { item: id, kind: it.kind || "decision", action, at: new Date().toISOString() };
+    if (d.note && d.note.trim()) body.note = d.note.trim().slice(0, 4000);
+    if (action === "merge") { body.repo = String(it.repo || ""); body.branch = String(it.branch || ""); body.tip = String(it.tip || ""); }
+    Object.assign(body, extra || {});
+    S.busy.add(id); render();
+    try {
+      await db.collection("answers").doc(id).set(body);
+      S.open.delete(id); S.draft.delete(id); S.confirm = null; S.error = null;
+      toast({
+        choose: "Saved. The next run acts on it.",
+        defer: "Deferred. It comes back on the next run.",
+        drop: "Dropped. The next run closes it.",
+        merge: "Approved. The next run merges it locally.",
+        changes: "Sent. The next run fixes it on the branch.",
+        bin: "Marked to bin. The next run deletes the branch.",
+        done: "Marked done.",
+        yes: "Saved. The next run picks it up.",
+        later: "Kept for later, at the bottom of this tab.",
+        no: "Noted. The next run closes it.",
+      }[action] || "Saved.");
+    } catch (e) {
+      S.error = { id, msg: writeError(e) };
+    } finally {
+      S.busy.delete(id); render();
+    }
+  }
+  async function undo(id) {
+    if (!db || S.busy.has(id)) return;
+    S.busy.add(id); render();
+    try { await db.collection("answers").doc(id).delete(); toast("Answer removed."); }
+    catch (e) { S.error = { id, msg: writeError(e) }; }
+    finally { S.busy.delete(id); render(); }
+  }
+  function writeError(e) {
+    const c = e && e.code;
+    if (c === "invalid_argument" || c === "not_granted" || c === "revoked") return "This view can't save answers. Open the inbox from your own claude.ai account.";
+    if (c === "resource_exhausted") return "Too many saves at once. Wait a few seconds and tap again.";
+    if (c === "quota_exceeded") return "The inbox store is full. The next run prunes old done items.";
+    return "Couldn't save. Check your connection and tap again.";
+  }
+
+  // ---------- pieces ----------
+  function chips(it, extra) {
+    const list = [];
+    if (it.repo) list.push(h("span", { class: "chip", text: it.repo }));
+    (extra || []).forEach(x => x && list.push(x));
+    const w = it.kind === "idea" ? null : waiting(it.found);
+    if (w && it.state !== "done" && it.state !== "dropped") list.push(h("span", { class: "chip", text: w }));
+    if (it.reopenedAt && it.state !== "done" && it.state !== "dropped") list.push(h("span", { class: "chip wait", text: "back again" }));
+    return h("div", { class: "chips" }, list);
+  }
+  function source(it) {
+    if (!it.source) return null;
+    const url = safeUrl(it.sourceUrl);
+    const label = h("code", { text: it.source });
+    return h("p", { class: "src" }, "From ", url ? h("a", { href: url, target: "_blank", rel: "noopener" }, label) : label);
+  }
+  function shots(it) {
+    // The field is `src`, not `url`: the run's guard refuses a write that names "url" twice.
+    const imgs = (Array.isArray(it.images) ? it.images : []).filter(x => x && safeUrl(x.src));
+    if (!imgs.length) return null;
+    return h("div", { class: "shots" }, imgs.map(x =>
+      h("figure", null, h("img", { src: safeUrl(x.src), alt: x.caption || "Screenshot", loading: "lazy" }),
+        x.caption ? h("figcaption", { class: "small muted", text: x.caption }) : null)));
+  }
+  function field(label, body) {
+    if (!body) return null;
+    return h("div", { class: "field" }, h("span", { class: "eyebrow", text: label }), body);
+  }
+  function noteBox(id, label, placeholder) {
+    const d = draftOf(id);
+    const ta = h("textarea", { id: "note-" + id, rows: 2, placeholder: placeholder || "" });
+    ta.value = d.note || "";
+    ta.addEventListener("input", () => { d.note = ta.value; if (S.error && S.error.id === id) { S.error = null; const e = document.getElementById("err-" + id); if (e) e.remove(); } });
+    return h("label", { class: "note", for: "note-" + id }, h("span", { class: "eyebrow", text: label }), ta);
+  }
+  function errorLine(id) {
+    return S.error && S.error.id === id ? h("p", { class: "err", id: "err-" + id, role: "alert", text: S.error.msg }) : null;
+  }
+  function confirmRow(id, question, yesLabel, onYes) {
+    return h("div", { class: "confirm" }, h("p", { class: "small", text: question }),
+      h("div", { class: "actions" },
+        h("button", { class: "btn danger", type: "button", disabled: S.busy.has(id), onclick: onYes }, yesLabel),
+        h("button", { class: "btn link", type: "button", onclick: () => { S.confirm = null; render(); } }, "Cancel")));
+  }
+  function answeredStrip(id, it, a) {
+    const deferred = a.action === "defer";
+    return h("div", { class: "answered" + (deferred ? " deferred" : "") },
+      h("span", { class: "eyebrow", text: deferred ? "Deferred" : "Your answer, waiting for the next run" }),
+      h("p", { class: "what" }, answerText(it, a)),
+      a.note ? prose(a.note, "small") : null,
+      h("div", { class: "actions" },
+        deferred ? null : h("button", { class: "btn link", type: "button", onclick: () => { S.open.add(id); const d = draftOf(id); d.option = a.option || null; d.note = a.note || ""; render(); } }, "Change"),
+        h("button", { class: "btn link", type: "button", disabled: S.busy.has(id), onclick: () => undo(id) }, deferred ? "Answer now" : "Undo")));
+  }
+  function optionList(id, it, opts, chosen, d) {
+    return h("div", { class: "opts", role: "group", "aria-label": "Options" }, opts.map(o =>
+      h("button", {
+        class: "opt" + (o.id === it.recommended ? " is-rec" : ""), type: "button", id: "opt-" + id + "-" + o.id,
+        "aria-pressed": chosen === o.id ? "true" : "false",
+        onclick: () => { d.option = o.id; render(); },
+      },
+        o.id === it.recommended ? h("span", { class: "opt-tag", text: "Recommended" }) : null,
+        h("span", { class: "opt-label" }, o.id === it.recommended ? h("mark", null, ...inline(o.label)) : inline(o.label)),
+        o.consequence ? h("span", { class: "small muted" }, ...inline(o.consequence)) : null)));
+  }
+
+  // ---------- cards ----------
+  function decisionCard(id, it, a) {
+    const opts = Array.isArray(it.options) ? it.options : [];
+    const rec = opts.find(o => o.id === it.recommended);
+    const d = draftOf(id);
+    const isOpen = S.open.has(id);
+    const busy = S.busy.has(id);
+    const card = h("article", { class: "card", id: "c-" + id },
+      chips(it, [EFFORT[it.effort] ? h("span", { class: "chip", text: it.effort }) : null]),
+      h("h3", null, ...inline(it.title || "Untitled question")),
+      it.question ? h("p", { class: "q" }, ...inline(it.question)) : null);
+
+    if (a && !isOpen) { add(card, answeredStrip(id, it, a), errorLine(id)); return card; }
+
+    if (rec && !isOpen) {
+      add(card, h("div", { class: "rec" },
+        h("span", { class: "eyebrow", text: "Recommended" }),
+        h("p", { class: "rec-label" }, h("mark", null, ...inline(rec.label))),
+        it.why ? prose(it.why, "small muted") : null));
+      add(card, h("div", { class: "actions" },
+        h("button", { class: "btn primary", type: "button", disabled: busy, onclick: () => act(id, it, "choose", { option: rec.id }) }, "Accept recommendation"),
+        h("button", { class: "btn link", type: "button", onclick: () => { S.open.add(id); render(); } }, "Other options and details")));
+      add(card, errorLine(id));
+      return card;
+    }
+
+    // Full view: context, every option, what it blocks, a note, defer and drop.
+    add(card, h("div", { class: "fields" },
+      field("Context", prose(it.context)),
+      field("What it blocks", prose(it.blocks)),
+      field("If you never answer", prose(it.ifIgnored))));
+    const chosen = d.option || (a && a.option) || (rec ? rec.id : null);
+    add(card, optionList(id, it, opts, chosen, d));
+    if (it.why) add(card, field("Why the recommendation", prose(it.why, "small")));
+    add(card, shots(it));
+    add(card, noteBox(id, "Note for the run (optional)", "Anything it should know when it acts on this"));
+    if (S.confirm === id + ":drop") {
+      add(card, confirmRow(id, "Drop this question? The next run closes it and doesn't ask again.", "Drop it", () => act(id, it, "drop")));
+    } else {
+      add(card, h("div", { class: "actions" },
+        h("button", { class: "btn primary", type: "button", disabled: busy || !chosen, onclick: () => act(id, it, "choose", { option: chosen }) },
+          chosen && chosen === it.recommended ? "Accept recommendation" : "Answer with this option"),
+        h("button", { class: "btn", type: "button", disabled: busy, onclick: () => act(id, it, "defer") }, "Defer"),
+        h("button", { class: "btn danger", type: "button", disabled: busy, onclick: () => { S.confirm = id + ":drop"; render(); } }, "Drop"),
+        h("button", { class: "btn link", type: "button", onclick: () => { S.open.delete(id); render(); } }, a ? "Keep my answer" : "Less")));
+    }
+    add(card, errorLine(id), source(it));
+    return card;
+  }
+
+  function branchCard(id, it, a) {
+    const busy = S.busy.has(id);
+    const ci = String(it.ci || "");
+    const ciChip = ci ? h("span", { class: "chip " + (ci === "green" ? "ok" : ci === "red" ? "bad" : ""), text: ci === "green" ? "CI green" : ci === "red" ? "CI red" : ci === "local" ? "tested locally" : ci === "none" ? "no CI" : "CI " + ci }) : null;
+    const sha = shortSha(it.tip);
+    const card = h("article", { class: "card", id: "c-" + id },
+      chips(it, [
+        it.mergeOrder ? h("span", { class: "chip", text: "merge " + it.mergeOrder }) : null,
+        ciChip,
+        it.size ? h("span", { class: "chip", text: it.size }) : null,
+        it.local ? h("span", { class: "chip wait", text: "local only" }) : null,
+      ]),
+      h("h3", null, ...inline(it.title || it.branch || "Branch")),
+      it.branch ? h("p", { class: "branch-name", text: it.branch + (it.base ? "  →  " + it.base : "") + (sha ? "  @ " + sha : "") }) : null);
+
+    const diff = safeUrl(it.diffUrl);
+    add(card, h("div", { class: "fields" },
+      field("What it does", prose(it.changed)),
+      field("Risk", prose(it.risk)),
+      field("How it was checked", prose(it.verified)),
+      Array.isArray(it.lookAt) && it.lookAt.length ? field("Worth a look", h("ul", null, it.lookAt.map(x => h("li", null, ...inline(x))))) : null,
+      field("After merging", prose(it.after))), shots(it));
+    add(card, diff
+      ? h("p", { class: "small" }, h("a", { href: diff, target: "_blank", rel: "noopener" }, "Open the diff on GitHub"))
+      : it.branch ? h("p", { class: "small muted" }, "Not on GitHub. In the repo: ", h("code", { text: "git diff " + (it.base || "main") + "..." + it.branch })) : null);
+
+    if (a && !S.open.has(id)) { add(card, answeredStrip(id, it, a), errorLine(id), source(it)); return card; }
+
+    add(card, noteBox(id, "Note (required for “Needs changes”)", "What should change before it merges"));
+    if (S.confirm === id + ":bin") {
+      add(card, confirmRow(id, "Bin this branch? The next run records its last commit and deletes it.", "Bin it", () => act(id, it, "bin")));
+    } else {
+      add(card, h("div", { class: "actions" },
+        h("button", { class: "btn ok", type: "button", disabled: busy || !sha, onclick: () => act(id, it, "merge") }, sha ? "Approve merge at " + sha : "Approve merge"),
+        h("button", { class: "btn", type: "button", disabled: busy, onclick: () => {
+          const d = draftOf(id);
+          if (!d.note || !d.note.trim()) { S.error = { id, msg: "Say what needs changing, so the next run can fix it." }; render(); const ta = document.getElementById("note-" + id); if (ta) ta.focus(); return; }
+          act(id, it, "changes");
+        } }, "Needs changes"),
+        h("button", { class: "btn", type: "button", disabled: busy, onclick: () => act(id, it, "defer") }, "Defer"),
+        h("button", { class: "btn danger", type: "button", disabled: busy, onclick: () => { S.confirm = id + ":bin"; render(); } }, "Bin"),
+        a ? h("button", { class: "btn link", type: "button", onclick: () => { S.open.delete(id); render(); } }, "Keep my answer") : null));
+      if (!sha) add(card, h("p", { class: "small muted", text: "This card has no commit recorded, so it can't be approved here. The next run refreshes it." }));
+    }
+    add(card, errorLine(id), source(it));
+    return card;
+  }
+
+  function jobCard(id, it, a) {
+    const busy = S.busy.has(id);
+    const card = h("article", { class: "card", id: "c-" + id },
+      chips(it, [it.where ? h("span", { class: "chip", text: it.where }) : null]),
+      h("h3", null, ...inline(it.title || "Job")),
+      h("div", { class: "fields" }, field("What to do", prose(it.steps)), field("Why it matters", prose(it.why))),
+      shots(it));
+    if (a && !S.open.has(id)) { add(card, answeredStrip(id, it, a), errorLine(id), source(it)); return card; }
+    add(card, noteBox(id, "Note (optional)", "What you found, or why not"));
+    if (S.confirm === id + ":drop") {
+      add(card, confirmRow(id, "Drop this job? The next run records that you're not doing it.", "Drop it", () => act(id, it, "drop")));
+    } else {
+      add(card, h("div", { class: "actions" },
+        h("button", { class: "btn primary", type: "button", disabled: busy, onclick: () => act(id, it, "done") }, "Done"),
+        h("button", { class: "btn", type: "button", disabled: busy, onclick: () => act(id, it, "defer") }, "Defer"),
+        h("button", { class: "btn danger", type: "button", disabled: busy, onclick: () => { S.confirm = id + ":drop"; render(); } }, "Drop"),
+        a ? h("button", { class: "btn link", type: "button", onclick: () => { S.open.delete(id); render(); } }, "Keep my answer") : null));
+    }
+    add(card, errorLine(id), source(it));
+    return card;
+  }
+
+  // Ideas: things a run thinks could be built, never built unasked. Yes, Later or No.
+  function ideaCard(id, it, a) {
+    const opts = Array.isArray(it.options) ? it.options : [];
+    const d = draftOf(id);
+    const isOpen = S.open.has(id);
+    const busy = S.busy.has(id);
+    const later = !!a && a.action === "later";
+    const card = h("article", { class: "card", id: "c-" + id },
+      chips(it, [it.size ? h("span", { class: "chip", text: "size " + it.size }) : null]),
+      h("h3", null, ...inline(it.title || "Idea")),
+      prose(it.idea),
+      h("div", { class: "fields" },
+        field("Why", prose(it.why)),
+        field("A yes means", prose(it.needs))));
+    if (a && !later && !isOpen) { add(card, answeredStrip(id, it, a), errorLine(id), source(it)); return card; }
+
+    const chosen = d.option || (a && a.option) || it.recommended || null;
+    if (opts.length) add(card, optionList(id, it, opts, chosen, d));
+    if (isOpen) add(card, noteBox(id, "Note (optional)", "Anything the run should know, or why not"));
+    add(card, h("div", { class: "actions" },
+      h("button", { class: "btn primary", type: "button", disabled: busy || (opts.length > 0 && !chosen), onclick: () => act(id, it, "yes", opts.length ? { option: chosen } : null) }, opts.length ? "Yes, this one" : "Yes"),
+      later ? null : h("button", { class: "btn", type: "button", disabled: busy, onclick: () => act(id, it, "later") }, "Later"),
+      h("button", { class: "btn danger", type: "button", disabled: busy, onclick: () => act(id, it, "no") }, "No"),
+      isOpen
+        ? (a && !later ? h("button", { class: "btn link", type: "button", onclick: () => { S.open.delete(id); render(); } }, "Keep my answer") : null)
+        : h("button", { class: "btn link", type: "button", onclick: () => { S.open.add(id); render(); } }, "Add a note")));
+    add(card, errorLine(id), source(it));
+    return card;
+  }
+
+  function deferredCard(id, it, a) {
+    const kind = it.kind === "branch" ? "branch" : it.kind === "job" ? "job" : it.kind === "idea" ? "idea" : "decision";
+    return h("article", { class: "card", id: "c-" + id },
+      chips(it, [h("span", { class: "chip", text: kind })]),
+      h("h3", null, ...inline(it.title || "Untitled")),
+      h("p", { class: "small muted", text: "Comes back to its queue on the next run." }),
+      a.note ? prose(a.note, "small") : null,
+      S.confirm === id + ":drop"
+        ? confirmRow(id, kind === "branch" ? "Bin this branch instead of keeping it deferred?" : "Drop this instead of keeping it deferred?", kind === "branch" ? "Bin it" : "Drop it", () => act(id, it, kind === "branch" ? "bin" : "drop"))
+        : h("div", { class: "actions" },
+            h("button", { class: "btn", type: "button", disabled: S.busy.has(id), onclick: () => undo(id) }, "Answer now"),
+            h("button", { class: "btn danger", type: "button", disabled: S.busy.has(id), onclick: () => { S.confirm = id + ":drop"; render(); } }, kind === "branch" ? "Bin" : "Drop")),
+      errorLine(id));
+  }
+
+  function doneCard(id, it) {
+    const dropped = it.state === "dropped";
+    return h("article", { class: "card quiet", id: "c-" + id },
+      chips(it, [h("span", { class: "chip " + (dropped ? "" : "ok"), text: dropped ? "dropped" : "done" }),
+        it.closedAt ? h("span", { class: "chip", text: niceDay(it.closedAt) }) : null]),
+      h("h3", null, ...inline(it.title || "Untitled")),
+      prose(it.outcome, "small"));
+  }
+
+  function group(title, hint, cards) {
+    if (!cards.length) return null;
+    return h("section", { class: "group" },
+      h("div", { class: "group-head" }, h("h2", { text: title }), hint ? h("span", { class: "hint", text: hint }) : null),
+      cards);
+  }
+  function empty(title, text) {
+    return h("div", { class: "empty" }, h("strong", { text: title }), h("span", { text: text }));
+  }
+
+  // ---------- render ----------
+  function render() {
+    const ae = document.activeElement;
+    const focusId = ae && ae.id && ae.id.startsWith("note-") ? ae.id : null;
+    const caret = focusId ? ae.selectionStart : null;
+
+    const buckets = { decide: [], review: [], jobs: [], ideas: [], deferred: [], done: [] };
+    const pending = { decide: [], review: [], jobs: [], ideas: [] };
+    const later = [];
+    for (const [id, it] of S.items) {
+      if (!it || typeof it !== "object") continue;
+      const p = place(id, it);
+      if (p.later) later.push([id, it, p.a]);
+      else if (p.tab === "deferred" || p.tab === "done") buckets[p.tab].push([id, it, p.a]);
+      else if (p.a) pending[p.tab].push([id, it, p.a]);
+      else buckets[p.tab].push([id, it, null]);
+    }
+    Object.values(buckets).forEach(b => b.sort(byPriorityThenAge));
+    Object.values(pending).forEach(b => b.sort(byPriorityThenAge));
+    [buckets.ideas, pending.ideas, later].forEach(b => b.sort(byNewest));
+    buckets.done.sort((a, b) => String(b[1].closedAt || "").localeCompare(String(a[1].closedAt || "")));
+
+    // Summary line
+    const sum = document.getElementById("summary");
+    const ready = S.status === "ready" && S.gotItems && S.gotAnswers;
+    if (S.status === "nodb") sum.textContent = "Open this page in claude.ai to load your inbox.";
+    else if (S.status === "private") sum.textContent = "This inbox is private to its owner.";
+    else if (S.status === "error") sum.textContent = "The inbox couldn't load. Reload the page to try again.";
+    else if (!ready) sum.textContent = "Loading your inbox…";
+    else {
+      const mins = buckets.decide.reduce((n, x) => n + (EFFORT[x[1].effort] || EFFORT.short).min, 0);
+      const parts = [];
+      if (buckets.decide.length) parts.push(buckets.decide.length + (buckets.decide.length === 1 ? " decision" : " decisions") + " (about " + mins + " min)");
+      if (buckets.review.length) parts.push(buckets.review.length + (buckets.review.length === 1 ? " branch" : " branches") + " to review");
+      if (buckets.jobs.length) parts.push(buckets.jobs.length + (buckets.jobs.length === 1 ? " job" : " jobs") + " for you");
+      if (buckets.ideas.length) parts.push(buckets.ideas.length + (buckets.ideas.length === 1 ? " idea" : " ideas") + " for when you have time");
+      const waitingN = pending.decide.length + pending.review.length + pending.jobs.length + pending.ideas.length;
+      sum.textContent = (parts.length ? parts.join(" · ") + "." : "Nothing waiting on you.") +
+        (waitingN ? " " + waitingN + " answered, waiting for the next run." : "");
+    }
+
+    // Tabs
+    const tabs = document.getElementById("tabs");
+    tabs.replaceChildren(...TABS.map(t => {
+      const n = buckets[t.id].length;
+      return h("button", {
+        class: "tab", role: "tab", type: "button", id: "tab-" + t.id,
+        "aria-selected": S.tab === t.id ? "true" : "false",
+        onclick: () => { S.tab = t.id; saveTab(t.id); S.confirm = null; render(); window.scrollTo({ top: 0 }); },
+      }, h("span", { class: "n" + (n ? "" : " zero"), text: ready ? String(n) : "–" }), h("span", { class: "l", text: t.label }));
+    }));
+
+    // View
+    const view = document.getElementById("view");
+    const out = [];
+    if (S.status === "nodb") out.push(empty("Not connected", "This page reads your inbox from claude.ai. Open it there, signed in as its owner."));
+    else if (S.status === "private") out.push(empty("Private inbox", "Only the owner can read or answer these items."));
+    else if (S.status === "error") out.push(empty("Couldn't load", "The inbox store didn't answer. Reload the page."));
+    else if (!ready) out.push(empty("Loading", "Fetching decisions, branches, jobs and ideas."));
+    else if (S.tab === "decide") {
+      const g = { quick: [], short: [], think: [] };
+      buckets.decide.forEach(([id, it]) => (g[it.effort] || g.short).push(decisionCard(id, it, null)));
+      for (const k of ["quick", "short", "think"]) out.push(group(EFFORT[k].label, EFFORT[k].hint, g[k]));
+      out.push(group("Answered", "waiting for the next run", pending.decide.map(([id, it, a]) => decisionCard(id, it, a))));
+      if (!buckets.decide.length && !pending.decide.length) out.push(empty("Nothing to decide", "A run adds a question here when something needs your call."));
+    } else if (S.tab === "review") {
+      const byRepo = new Map();
+      buckets.review.forEach(([id, it]) => { const r = it.repo || "other"; if (!byRepo.has(r)) byRepo.set(r, []); byRepo.get(r).push([id, it]); });
+      for (const [repo, list] of byRepo) {
+        list.sort((x, y) => (parseInt(x[1].mergeOrder, 10) || 99) - (parseInt(y[1].mergeOrder, 10) || 99));
+        out.push(group(repo, list.length > 1 ? "in merge order" : null, list.map(([id, it]) => branchCard(id, it, null))));
+      }
+      out.push(group("Answered", "waiting for the next run", pending.review.map(([id, it, a]) => branchCard(id, it, a))));
+      if (!buckets.review.length && !pending.review.length) out.push(empty("No branches to review", "New burn/ branches appear here, grouped by repo in merge order."));
+    } else if (S.tab === "jobs") {
+      out.push(group("Only you can do these", "a login, a console, a payment, hardware", buckets.jobs.map(([id, it]) => jobCard(id, it, null))));
+      out.push(group("Answered", "waiting for the next run", pending.jobs.map(([id, it, a]) => jobCard(id, it, a))));
+      if (!buckets.jobs.length && !pending.jobs.length) out.push(empty("No jobs for you", "Things that need your hands, like a login or a key to rotate, appear here."));
+    } else if (S.tab === "ideas") {
+      const byDay = new Map();
+      buckets.ideas.forEach(([id, it]) => {
+        const k = String(it.found || "");
+        if (!byDay.has(k)) byDay.set(k, { title: niceDay(it.found) || "Ideas", cards: [] });
+        byDay.get(k).cards.push(ideaCard(id, it, null));
+      });
+      for (const g of byDay.values()) out.push(group(g.title, "from that run", g.cards));
+      out.push(group("Answered", "waiting for the next run", pending.ideas.map(([id, it, a]) => ideaCard(id, it, a))));
+      out.push(group("Later", "kept, and not in the count; answer any time", later.map(([id, it, a]) => ideaCard(id, it, a))));
+      if (!buckets.ideas.length && !pending.ideas.length && !later.length) out.push(empty("No ideas waiting", "When a run empties its queue it leaves ideas here. Nothing waits on them, and none is built without a yes."));
+    } else if (S.tab === "deferred") {
+      out.push(group("Deferred", "they come back on the next run", buckets.deferred.map(([id, it, a]) => deferredCard(id, it, a))));
+      if (!buckets.deferred.length) out.push(empty("Nothing deferred", "Defer anything you can't face today. It comes back on the next run."));
+    } else {
+      out.push(group("Done", "what your answers led to, newest first", buckets.done.map(([id, it]) => doneCard(id, it))));
+      if (!buckets.done.length) out.push(empty("Nothing closed yet", "After a run acts on your answers, the results show here."));
+    }
+    view.replaceChildren(...out.filter(Boolean));
+
+    if (focusId) {
+      const el = document.getElementById(focusId);
+      if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(caret, caret); } catch (e) {} }
+    }
+  }
+
+  // ---------- start ----------
+  // Copy buttons on the command list. Clipboard writes can be refused in some app views;
+  // then select the phrase so a long-press copies it.
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+  document.querySelectorAll(".cmd .copy").forEach(btn => { btn.innerHTML = COPY_ICON; btn.addEventListener("click", async () => {
+    const say = btn.getAttribute("data-say") || "";
+    try { await navigator.clipboard.writeText(say); toast("Copied " + say + "."); }
+    catch (e) {
+      const code = btn.parentElement.querySelector(".phrase");
+      const r = document.createRange(); r.selectNodeContents(code);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      toast("Selected. Copy it from there.");
+    }
+  }); });
+  render();
+  (async () => {
+    const c = window.claude;
+    if (!c || typeof c.use !== "function") { S.status = "nodb"; render(); return; }
+    let ns, user;
+    try { [ns, user] = await Promise.all([c.use("db"), c.use("user")]); } catch (e) { ns = null; }
+    if (!ns) { S.status = "nodb"; render(); return; }
+    if (user && !(await user.isOwner())) { S.status = "private"; render(); return; }
+    db = ns;
+    S.status = "ready";
+    const fail = () => { clearTimeout(slow); S.status = "error"; render(); };
+    // If the store hasn't answered in 10 seconds, say so instead of loading forever.
+    const slow = setTimeout(() => { if (!(S.gotItems && S.gotAnswers)) { S.status = "error"; render(); } }, 10000);
+    const got = () => { if (S.gotItems && S.gotAnswers) { clearTimeout(slow); if (S.status === "error") S.status = "ready"; } render(); };
+    db.collection("items").limit(1000).onSnapshot(snap => {
+      S.items = new Map(snap.docs.filter(d => d.exists).map(d => [d.id, d.data()]));
+      S.gotItems = true; got();
+    }, fail);
+    db.collection("answers").limit(1000).onSnapshot(snap => {
+      S.answers = new Map(snap.docs.filter(d => d.exists).map(d => [d.id, d.data()]));
+      S.gotAnswers = true; got();
+    }, fail);
+  })();
+})();
+</script>

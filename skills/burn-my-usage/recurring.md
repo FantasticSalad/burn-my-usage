@@ -17,7 +17,9 @@ may change, and say what it must never do.
 
 For each repo, run the audit its ecosystem has, read-only: `npm audit --omit=dev` (and with
 dev), an already-installed `pip-audit`, `cargo audit`, `govulncheck ./...`,
-`bundle audit`. Skip a tool that isn't installed; don't install global tools.
+`bundle audit`. Skip a tool that isn't installed; don't install global tools. Don't leave
+the skip only in the run log: add one job card per missing tool ("install pip-audit so 11
+Python repos get audited") unless an open card already asks for it.
 
 A fix within the same major version is Build work: bump it on a branch, run the suites, and
 say on the card which advisory it closes. A fix that needs a major version is a question.

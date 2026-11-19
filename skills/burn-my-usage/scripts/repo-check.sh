@@ -2,10 +2,16 @@
 # Start-of-run check over every git repository under the given folders. Read-only apart from
 # `git fetch`. One line per repo, then every open burn/ branch.
 #
-#   bash repo-check.sh [--no-fetch] <folder>...
+#   bash repo-check.sh [--no-fetch] [--summary] <folder>...
+#
+# --summary is for setup: the table, then one line per repo that has open work (unmerged
+# branches, other worktrees, stashes, unmerged remote branches), without the raw lists.
 #
 # Finds repositories up to two levels down (~/code/app and ~/code/org/app), skipping
 # node_modules, vendor and hidden folders.
+#
+# IDLE is days since the newest commit on any branch, remote branches included, so another
+# session's branch or a fetch can reset it.
 #
 # NOTE column:
 #   BEHIND       the local default branch is behind origin. Branch from origin/<default>, and
@@ -20,15 +26,23 @@
 set -u
 
 fetch=1
-if [ "${1:-}" = --no-fetch ]; then
-  fetch=0
-  shift
-fi
+summary=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-fetch) fetch=0; shift ;;
+    --summary) summary=1; shift ;;
+    *) break ;;
+  esac
+done
 [ $# -gt 0 ] || set -- "$PWD"
 
 now=$(date +%s)
 printf '%-28s %-34s %-8s %-7s %-5s %-6s %s\n' REPO BRANCH DEFAULT 'AHD/BHD' DIRTY 'IDLE' NOTE
 burns=""
+open=""
+
+# "1 stash", "2 stashes": count, singular, plural.
+plural() { if [ "$1" = 1 ]; then printf '1 %s' "$2"; else printf '%s %s' "$1" "$3"; fi; }
 
 check_repo() {
   local d=$1 name=$2 note="" def br ab ahead behind dirty last idle b state merged count age
@@ -65,9 +79,11 @@ check_repo() {
   idle=$(( (now - ${last:-$now}) / 86400 ))d
   printf '%-28s %-34s %-8s %-7s %-5s %-6s %s\n' "$name" "$br" "${def:-?}" "${ab:-?}" "$dirty" "$idle" "$note"
 
+  local unmerged=0 wts stashes remotes parts=""
   for b in $(git -C "$d" for-each-ref --format='%(refname:short)' refs/heads); do
     [ "$b" = "$def" ] && continue
     git -C "$d" merge-base --is-ancestor "$b" "$def" 2>/dev/null && continue
+    unmerged=$((unmerged + 1))
     if git -C "$d" rev-parse -q --verify "refs/remotes/origin/$b" >/dev/null; then
       count=$(git -C "$d" rev-list --count "origin/$b..$b")
       state="pushed"
@@ -81,6 +97,21 @@ check_repo() {
     age=$(( (now - $(git -C "$d" log -1 --format=%ct "$b")) / 86400 ))
     burns="${burns}  ${name}: ${b} (${count:-?} commits on ${def}, ${state}${merged}, last commit ${age}d ago)\n"
   done
+  if [ "$summary" = 1 ]; then
+    wts=$(git -C "$d" worktree list --porcelain 2>/dev/null | grep -c '^worktree ')
+    wts=$(( ${wts:-1} > 0 ? ${wts:-1} - 1 : 0 ))
+    stashes=$(git -C "$d" stash list 2>/dev/null | wc -l | tr -d ' ')
+    remotes=0
+    if [ -n "$def" ]; then
+      remotes=$(git -C "$d" for-each-ref --format='%(refname:short)' --no-merged="$def" refs/remotes 2>/dev/null | grep -vc '/HEAD$')
+    fi
+    [ "$unmerged" = 0 ] || parts="$parts, $(plural "$unmerged" 'unmerged branch' 'unmerged branches')"
+    [ "$wts" = 0 ] || parts="$parts, $(plural "$wts" 'other worktree' 'other worktrees')"
+    [ "${stashes:-0}" = 0 ] || parts="$parts, $(plural "$stashes" stash stashes)"
+    [ "${remotes:-0}" = 0 ] || parts="$parts, $(plural "$remotes" 'unmerged remote branch' 'unmerged remote branches')"
+    [ -z "$parts" ] || open="${open}  ${name}: ${parts#, }\n"
+    return 0
+  fi
   printf '  Worktrees for %s:\n' "$name"
   git -C "$d" worktree list --porcelain
   git -C "$d" stash list --format='  Stash: %gd %s'
@@ -89,6 +120,11 @@ check_repo() {
 
 for root in "$@"; do
   root=${root%/}
+  # git is a native program: on Windows give it C:/... paths. Git Bash doesn't convert a
+  # /c/Users/... path with an apostrophe in it, so ~/code under such a profile failed.
+  case "$root" in
+    /*) command -v cygpath >/dev/null 2>&1 && root=$(cygpath -m "$root") ;;
+  esac
   if [ -e "$root/.git" ]; then
     check_repo "$root" "$(basename "$root")"
     continue
@@ -100,5 +136,11 @@ for root in "$@"; do
     -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.*/.git' 2>/dev/null | sort)
 done
 
+if [ "$summary" = 1 ]; then
+  printf '\nIDLE: days since the newest commit on any branch, remote ones included.\n'
+  printf 'Open work (repos not listed have none):\n'
+  if [ -n "$open" ]; then printf '%b' "$open"; else printf '  none\n'; fi
+  exit 0
+fi
 printf '\nOpen branches (all prefixes):\n'
 if [ -n "$burns" ]; then printf '%b' "$burns"; else printf '  none\n'; fi

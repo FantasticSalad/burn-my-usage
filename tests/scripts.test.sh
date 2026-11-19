@@ -112,7 +112,23 @@ expect "start without config reports it" "$out" "HAS_config=no"
 refute "start without config marks no session" "$(ls "$home")" "active"
 refute "start without config makes no run folder" "$(ls "$home")" "runs"
 printf 'synthetic config\n' >"$home/config.md"
+# Without a usable roots.txt the guard refuses every repository edit, so a run would do
+# nothing useful. Start refuses and creates nothing.
+out=$(bash "$s/start.sh" sess-1 2>&1); rc=$?
+expect "start without roots.txt is refused" "$out" "NO_ROOTS"
+expect "start without roots.txt exits 3" "$rc" "3"
+refute "start without roots.txt marks no session" "$(ls "$home")" "active"
+refute "start without roots.txt takes no run lock" "$(ls "$home")" "run.lock"
+printf '# comment only\n\nrelative/path\n' >"$home/roots.txt"
+out=$(bash "$s/start.sh" sess-1 2>&1); rc=$?
+expect "start with no absolute root is refused" "$out" "NO_ROOTS"
+refute "start with no absolute root marks no session" "$(ls "$home")" "active"
+printf '%s\n' "$tmp/code" >"$home/roots.txt"
+# Inbox page answers saved by an earlier run are stale; a run starts with none on disk.
+mkdir -p "$home/page-answers/sess-1/answers"
+printf '{}\n' >"$home/page-answers/sess-1/answers/br-old.json"
 out=$(bash "$s/start.sh" sess-1)
+refute "start clears old inbox page answers" "$(ls "$home")" "page-answers"
 expect "start marks the session" "$(ls "$home/active")" "sess-1"
 expect "start reports the run dir" "$out" "RUN_DIR="
 expect "start reports the config" "$out" "HAS_config=yes"
@@ -135,10 +151,16 @@ bash "$s/stop.sh" sess-2 >/dev/null
 expect "no id and no env is an error" "$(bash "$s/start.sh" 2>&1)" "ERROR"
 out=$(CLAUDE_CODE_SESSION_ID=env-sess bash "$s/start.sh")
 expect "falls back to CLAUDE_CODE_SESSION_ID" "$(ls "$home/active")" "env-sess"
+CLAUDE_CODE_SESSION_ID=env-sess bash "$s/stop.sh" >/dev/null
 out=$(CLAUDE_CODE_SESSION_ID=env-sess bash "$s/start.sh" arg-sess)
 expect "different ids: both marked (arg)" "$(ls "$home/active")" "arg-sess"
 expect "different ids: both marked (env)" "$(ls "$home/active")" "env-sess"
 expect "different ids are reported" "$out" "SESSION_IDS_DIFFER"
+# Marking the calling session turns the guard on there too, which surprises a user who passed
+# a test id. Name both and say how to end it.
+expect "the report names the id passed" "$out" "passed arg-sess"
+expect "the report names this session's id" "$out" "this session env-sess"
+expect "the report says the guard is on here" "$out" "guard is on in this session"
 expect "a bad id is an error even with env set" "$(CLAUDE_CODE_SESSION_ID=env-sess bash "$s/start.sh" '../x' 2>&1)" "ERROR"
 out=$(CLAUDE_CODE_SESSION_ID=env-sess bash "$s/stop.sh" arg-sess)
 expect "stop clears both" "$out" "STOPPED"
@@ -148,6 +170,22 @@ refute "both markers gone" "$(ls "$home/active")" "sess"
 rm -rf "$home/runs"
 out=$(bash "$s/start.sh" --paths)
 expect "--paths prints the home" "$out" "BURN_HOME="
+# "0.2.5" alone doesn't say which code ran when main and the marketplace differ: print the
+# version, and the commit when the scripts run from a git checkout (as here).
+version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$here/../.claude-plugin/plugin.json" | head -n 1)
+expect "--paths prints the plugin version" "$out" "VERSION=$version"
+repo_dir="$here/.."
+command -v cygpath >/dev/null 2>&1 && repo_dir=$(cygpath -m "$repo_dir")
+head_sha=$(git -C "$repo_dir" rev-parse --short HEAD)
+expect "the test can read this checkout's commit" "$head_sha" "$(printf '%s' "$head_sha" | grep -E '^[0-9a-f]{7,}$')"
+refute "the test's commit is not empty" "x${head_sha}x" "xx"
+expect "--paths prints the commit in a checkout" "$out" "COMMIT=$head_sha"
+# Git Bash on Windows can print a wrong zone label (AUSEST for AEDT), so the offset is shown.
+lt=$(printf '%s\n' "$out" | sed -n 's/^LOCAL_TIME=//p')
+case "$lt" in
+  *"(UTC+"[0-9][0-9][0-9][0-9]")" | *"(UTC-"[0-9][0-9][0-9][0-9]")") pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); printf 'FAIL LOCAL_TIME shows the UTC offset\n  got: %s\n' "$lt" ;;
+esac
 refute "--paths makes no run folder" "$(ls "$home")" "runs"
 
 # --- repo-check.sh ------------------------------------------------------------------------------
@@ -179,6 +217,20 @@ expect "flags uncommitted work" "$out" "DIRTY"
 expect "flags no remote" "$out" "NO-REMOTE"
 expect "lists the burn branch" "$out" "org/app: burn/2026-10-08-fix (1 commits on main, local only"
 refute "a bare repo is not listed" "$out" "origin.git "
+expect "the full scan lists worktrees" "$out" "worktree "
+
+# --summary is for setup: the table and one line per repo with open work, nothing raw.
+g -C "$code/org/app" worktree add -q "$tmp/app-wt" -b side
+out=$(bash "$s/repo-check.sh" --no-fetch --summary "$code")
+expect "summary keeps the table" "$out" "org/app"
+expect "summary keeps the notes" "$out" "DIRTY"
+refute "summary has no raw worktree list" "$out" "worktree "
+refute "summary has no remote branch list" "$out" "Remote: "
+expect "summary counts open branches and worktrees" "$out" "org/app: 1 unmerged branch, 1 other worktree"
+refute "summary skips a repo with nothing open" "$out" "lib: "
+expect "summary explains IDLE" "$out" "IDLE"
+out=$(bash "$s/repo-check.sh" --summary --no-fetch "$code")
+expect "flags work in either order" "$out" "org/app: 1 unmerged branch"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

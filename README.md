@@ -1,9 +1,15 @@
 # Burn My Usage
 
-A Claude Code plugin for the end of the week. If your Pro or Max plan has usage left that
-will reset unused, start a run before you log off. It works through your repos while you're
+A repository automation workflow for spare subscription usage. If your plan has usage left
+that will reset unused, start a run before you log off. It works through your repos while you're
 away and leaves you branches with tests and a short inbox of decisions, which you can review
 in a few minutes and merge or throw away.
+
+The workflow is shared; host adapters supply session identity, tools, guard events and usage
+samples. The published runtime remains Claude Code. This development tree includes an
+experimental Codex package with startup context and native guard wiring; installed hook
+enforcement and unattended continuation are still acceptance gates. See
+[host architecture](docs/HOST-ARCHITECTURE.md) for the boundary.
 
 ```text
 /burn-my-usage
@@ -33,7 +39,7 @@ in a few minutes and merge or throw away.
   Merge on, and stay local until you push.
 - Deploy, publish a package, open or comment on PRs and issues, send messages, or reach other
   machines over ssh.
-- Read or write secrets, change CI workflows, git hooks or Claude Code settings, or touch
+- Read or write secrets, change CI workflows, git hooks or agent settings, or touch
   your uncommitted work.
 - Delete folders recursively, except its own `runs/` and `worktrees/` folders.
 - Ask you anything mid-run. Nobody's there to answer, so questions go in the inbox.
@@ -43,7 +49,29 @@ that refuses the action before it runs. The hook only acts in the session that s
 run; everywhere else it returns immediately. It's a seatbelt against mistakes, not a sandbox:
 [SECURITY.md](SECURITY.md) says exactly what it catches and what it can't.
 
+## Costs are your responsibility
+
+Check two things before you set it up:
+
+- **You're on a subscription plan** (Pro, Max, Team or Enterprise), not paying per token
+  through an API key or a cloud provider (Bedrock, Vertex, Foundry). On per-token billing
+  there is no spare usage: every token a run spends is charged.
+- **Paid extra usage is off** in claude.ai Settings > Usage, or capped at an amount you're
+  happy to pay. With it on, Claude Code keeps going past your weekly limit and bills you.
+
+The stop line works from sampled usage figures, so a run can overshoot it, and BURN IT ALL
+takes a run to 100% of your limit on purpose. Your billing settings are the only reliable
+money boundary.
+
+Burn My Usage is provided as is, without warranty of any kind (see [LICENSE](LICENSE)). You
+are responsible for any charges that running it incurs, and the author accepts no liability
+for them.
+
 ## Requirements
+
+These installation and run instructions describe Claude Code. Codex uses the shared workflow
+through an experimental adapter and is not yet a supported unattended runtime. No Codex setup
+or permission changes are required to use the existing Claude installation.
 
 - Claude Code 2.1.295 or later, signed in with a Pro, Max, Team or Enterprise plan. On an API
   key or a cloud provider every token is billed, so there is no spare usage to burn; setup
@@ -51,6 +79,11 @@ run; everywhere else it returns immediately. It's a seatbelt against mistakes, n
 - git, and bash (on Windows, the Git Bash that Claude Code already uses). No other
   dependencies: no jq, Python or Node.
 - `gh` signed in, if you want branches pushed to private GitHub repos or issues used.
+- A terminal `claude` session to run it in. Runs learn your usage from Claude Code's status
+  line, which refreshes in the terminal; in testing, the VS Code panel didn't refresh it.
+- Optional: your ecosystems' audit tools (`pip-audit`, `cargo audit`, `govulncheck`,
+  `bundle audit`; `npm audit` comes with npm). The weekly vulnerability check skips repos
+  whose tool isn't installed, and setup tells you which.
 
 ## Install
 
@@ -61,9 +94,39 @@ run; everywhere else it returns immediately. It's a seatbelt against mistakes, n
 ```
 
 Setup takes a few minutes. It asks where your repos are, which to skip, whether to push
-branches, and where your usage line is. It also offers to add a status line hook so runs can
-see your weekly usage (your own status line keeps working). Nothing in your settings changes
-without you seeing the change and saying yes.
+branches, and where your usage line is. It may change two things in `~/.claude/settings.json`,
+each shown to you first and only with your yes:
+
+- a `statusLine` command, so runs can see your weekly usage (your own status line keeps
+  working);
+- `BURN_MY_USAGE_HOME` under `env`, only if you keep the burn home somewhere other than
+  `~/.burn-my-usage`. That needs a restart of Claude Code before setup can finish, so setup
+  stops there and resumes when you run it again.
+
+"Skip" is an instruction to the run, not a fence: a run can still read a skipped repo under
+one of your roots. To keep a repo out of reach, list your other repos individually as roots
+rather than their shared parent folder.
+
+### Codex package (experimental)
+
+The source includes a portable Codex manifest and a separate hook definition. Prepare a
+review copy in a new absolute folder, then check its inventory and local dependencies:
+
+```text
+node scripts/codex-package.mjs prepare ABSOLUTE_NEW_FOLDER
+node scripts/codex-package.mjs check ABSOLUTE_NEW_FOLDER
+```
+
+Preparation copies an explicit runtime file list and SHA-256 inventory. It does not install
+the package or edit Codex settings. Manual desktop installation and hook trust are described
+in [Codex installation](docs/CODEX-INSTALL.md). Node 18+ is required; on Windows, configure
+`codex_bash` in the burn home's config or `BMU_BASH` with the installed Git Bash path.
+The native hook bridge derives identity from Codex events. Startup only supplies context;
+it does not start a run. Live quota checks now use the supported local app server; each
+authorization check refreshes instead of reusing a cached allowance. Native unattended
+acceptance remains blocked. A compatibility manifest fixes the hook-discovery mismatch
+found in tested Windows clients; native trust and enforcement still need acceptance. The
+installation guide includes a read-only discovery/trust diagnostic.
 
 ## Running it
 
@@ -89,7 +152,20 @@ claude --permission-mode auto --add-dir ~/.burn-my-usage
 - **`/goal`** keeps it working turn after turn until the run reports it's finished.
 - **Leave the session open and the machine awake.** When the 5-hour limit hits, Claude Code
   waits and continues by itself after the reset, but only in an open session.
+- **Start it from a terminal `claude` session.** A run knows your usage from the status line,
+  and treats data older than an hour as unknown, which stops it. The terminal refreshes the
+  status line as the run works; the VS Code panel was seen not to, which left a run about an
+  hour.
+- **Use a dedicated session.** Until the run stops, that session can only change files in
+  your roots, the burn home and temp folders, and only commit on `burn/` branches. Do your own
+  work in another session.
 - **Stop it** with Esc, then `/burn-my-usage stop`.
+- **BURN IT ALL.** Type exactly that, in capitals, in the run's session, and this run goes to
+  100% of your weekly limit instead of your stop line. It lasts for this run only (or the next
+  one you start in that session within the hour) and never changes your config. A run that
+  stops at its line with work left tells you it can. **Turn extra usage off first** (claude.ai
+  Settings > Usage): usage is sampled, so a run can overshoot 100%, and with extra usage on,
+  anything past your limit is billed.
 
 ## Your week with it
 
@@ -111,8 +187,16 @@ claude --permission-mode auto --add-dir ~/.burn-my-usage
    your decisions unblocked, and carries on. `/burn-my-usage inbox` processes your answers
    without starting a run.
 
-Put the burn home in a synced folder or a private git repo and you can answer from your
-phone.
+Keep the burn home in a local folder. It holds each item's live git worktree, a Git bundle of
+every branch (the full history of private repos) and a usage file rewritten on every status
+line refresh, so a synced folder uploads all of that and can hold files open: on a OneDrive
+burn home, worktree cleanup failed and left folders to delete by hand.
+
+**Answering from your phone.** In Claude Code, setup can publish an inbox page: a private
+page on claude.ai with the same cards, where each answer is one tap. A run adds and updates
+cards there but can't answer them, and approving a branch approves the exact commit shown.
+It is optional and off by default, because card text is then stored on claude.ai;
+`INBOX.md` stays the record either way. The wishlist is still a local file.
 
 ## Commands
 
@@ -155,7 +239,8 @@ public repo a pushed branch is visible to everyone, so they stay local.
 editing. It won't touch uncommitted work, but two people on one branch is still a bad idea.
 
 **Why markdown for the inbox and not an app?** It works in any editor, syncs with anything,
-and diffs cleanly in git.
+and diffs cleanly in git. The optional inbox page sits on top of it for one-tap answers; the
+file is still what a run writes first.
 
 ## Development
 
@@ -163,7 +248,7 @@ and diffs cleanly in git.
 bash tests/run-all.sh
 ```
 
-Core tests use bash, git, sed and awk. Optional release-scanner tests need Node 18+; CI runs
+Core tests use bash, git, sed and awk. Optional release and Codex tests need Node 18+; CI runs
 both on Linux, Windows (Git Bash) and macOS with the system bash 3.2.
 
 `claude plugin validate . --strict` checks the manifests. `evals/` holds `claude plugin
@@ -209,28 +294,32 @@ paths containing parent traversal are refused.
 recurring.md holds enabled checks and dates (dependency/secrets/loose-ends/CI on; docs off).
 Optional guard-deny.txt adds command patterns; guard-allow-mcp.txt contains exact
 user-reviewed tool names. statusline-next preserves the previous status-line command.
-usage.json, active/, owned/, runs/ and guard.log are runtime state. No credential values
+usage.json, usage/, active/, run.lock/, owned/, runs/ and guard.log are runtime state. No credential values
 are requested by the plugin.
 
 ## Runtime and cost limits
 
-This release supports Claude Code only; Codex and claude.ai are future work.
+The published release supports Claude Code only. The shared workflow and experimental Codex
+adapter in this development tree do not establish native Codex runtime support; the remaining
+checks are listed in [host architecture](docs/HOST-ARCHITECTURE.md). claude.ai is unsupported.
 Fresh usage is required for unattended changes. Missing/stale data means save a handoff
 and stop, including in headless sessions. Disable paid extra usage or use provider-side
 caps: a percentage sample cannot guarantee no overage. Pushing can consume CI minutes.
-The hook uses onFailure: block; a missing or crashing script can block normal sessions,
+The Claude hook uses onFailure: block; a missing or crashing script can block normal sessions,
 until the user repairs or disables the plugin. Setup shows any setting change first.
 
 ## Network and data
 
-Repository source, plans and issue context enter the selected Claude model service as
+Repository source, plans and issue context enter the selected host's model service as
 part of normal agent work. Optional GitHub features use api.github.com and the configured
 origin at github.com; pushes send branch contents and can run CI. Other configured git
 hosts are used only in explicitly enabled all mode. Dependency installs/audits can contact
 the package registries named by each project's lockfiles, and documentation lookups contact
 the requested sites. Review project scripts before running them: children are outside
 string-level enforcement. There is no plugin telemetry or model API client. Authentication
-stays inside approved git/gh/Claude clients.
+stays inside approved git/gh/agent clients. Offline adapter tests use synthetic inputs and
+make no model calls. The plugin never discovers usage by reading authentication files or
+native session stores.
 
 The [guard review](docs/GUARD-REVIEW.md) records the gaps it reproduced, their fixes and what
 still isn't covered. [Eval accounting](docs/EVAL-ACCOUNTING.md) explains how eval results are

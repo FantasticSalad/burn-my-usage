@@ -1,10 +1,16 @@
 // Location-only packaging/privacy audit. Node 18+, git; no model calls.
-// node tests/release-scan.mjs [--history] [--redaction-list <user-supplied-file>]
+// node tests/release-scan.mjs [--history] [--index] [--public] [--redaction-list <user-supplied-file>]
+// --public scans only what a public copy would hold: it skips the internal documents folder,
+// and fails any other file that links into it. The test suite runs it on every change, so a
+// personal marker is caught when it is written, not when a release is cut.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 const history = args.includes('--history');
 const staged = args.includes('--index');
+const publicOnly = args.includes('--public');
+const internalDir = ['docs','internal',''].join('/');
+const internalLink = new RegExp('\\]\\([^)]*' + ['internal','/'].join('') + '[^)]*\\)');
 const index = args.indexOf('--redaction-list');
 const terms = index < 0 ? [] : readFileSync(args[index + 1], 'utf8').split(/\r?\n/).map(x => x.trim()).filter(x => x && !x.startsWith('#'));
 function git(...argv) {
@@ -16,7 +22,8 @@ const personal = [
   ['auto','pilot'].join(''),
   ['C:',String.fromCharCode(92),'Code'].join(''), ['C:', '/', 'Code'].join(''),
   ['~/', 'One', 'Drive'].join(''), ['~/','se','crets'].join(''),
-  ['session','.sh'].join(''), ['notice','board'].join('')
+  ['session','.sh'].join(''), ['notice','board'].join(''),
+  ['Mel','bourne'].join('')
 ];
 const secret = /(?:-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,}|(?:AKIA|ASIA)[A-Z0-9]{16}|xox[abprs]-[A-Za-z0-9-]{10,})/;
 let failures=0, files=0, messages=0;
@@ -24,13 +31,14 @@ function scanText(ref,name,body){
   const fail=(line,kind)=>{console.log(ref.slice(0,8)+':'+name+':'+line+': '+kind);failures++;};
   body.split(/\r?\n/).forEach((line,i)=>{
     if(personal.some(x=>line.toLowerCase().includes(x.toLowerCase()))||/\bMachine [AB]\b|\b00_[A-Z_]+\.md\b/.test(line))fail(i+1,'personal marker');
+    if(publicOnly&&internalLink.test(line))fail(i+1,'link to an internal document');
     if(secret.test(line))fail(i+1,'possible secret');
     if(terms.some(x=>line.toLowerCase().includes(x.toLowerCase())))fail(i+1,'private redaction term');
   });
 }
 const refs = history ? git('rev-list','--all').trim().split(/\s+/).filter(Boolean) : [staged ? 'INDEX' : 'HEAD'];
 for (const ref of refs) {
-  if(!staged){
+  if(!staged&&!publicOnly){
     // Author/license credits are allowed; subjects and bodies receive no exemptions.
     scanText(ref,'COMMIT_MESSAGE',git('show','-s','--format=%B',ref));
     messages++;
@@ -39,6 +47,7 @@ for (const ref of refs) {
   for (const row of rows) {
     const [meta,name] = row.split('\t');
     let [mode,type,sha,size]=meta.trim().split(/\s+/);
+    if(publicOnly&&name.startsWith(internalDir))continue;
     if(staged){sha=type;type='blob';size=git('cat-file','-s',sha).trim();}
     const fail=(line,kind)=>{console.log(ref.slice(0,8)+':'+name+':'+line+': '+kind);failures++;};
     if (mode==='120000'||type==='commit'||Number(size)>262144||/(^|\/)(bin|node_modules|results)(\/|$)|(^|\/)(\.DS_Store|Thumbs\.db|desktop\.ini)$/.test(name)) { fail(0,'packaging'); continue; }
@@ -49,8 +58,9 @@ for (const ref of refs) {
     let body=git('cat-file','blob',sha);
     if(body.includes('\0')){fail(0,'binary content');continue;}
     if(name==='LICENSE')body=body.replace(/^Copyright.*$/m,'');
-    if(name==='.claude-plugin/plugin.json'||name==='.claude-plugin/marketplace.json'){
+    if(name==='plugin.json'||name==='.claude-plugin/plugin.json'||name==='.claude-plugin/marketplace.json'){
       let m;try{m=JSON.parse(body);}catch{fail(0,'invalid manifest JSON');continue;}
+      if(!m || typeof m!=='object' || Array.isArray(m)){fail(0,'invalid manifest JSON');continue;}
       if(m.author)delete m.author.name;if(m.owner)delete m.owner.name;body=JSON.stringify(m,null,2);
     }
     scanText(ref,name,body);

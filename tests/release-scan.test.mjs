@@ -69,3 +69,38 @@ test('unexpected binary content fails packaging',()=>fixture((dir,git)=>{
   writeFileSync(join(dir,'data.dat'),Buffer.from([0,1,2,3]));git('add','data.dat');
   const r=scan(dir);assert.equal(r.status,1,r.stderr);assert.match(r.stdout,/binary content/);
 }));
+
+test('portable manifest preserves author credit while scanning other fields',()=>fixture((dir,git)=>{
+  const author=['auto','pilot'].join('');
+  writeFileSync(join(dir,'plugin.json'),JSON.stringify({name:'fixture-plugin',author:{name:author}}));
+  git('add','plugin.json');
+  assert.equal(scan(dir).status,0);
+  writeFileSync(join(dir,'plugin.json'),JSON.stringify({name:'fixture-plugin',author:{name:author},description:author}));
+  git('add','plugin.json');
+  const r=scan(dir);assert.equal(r.status,1);assert.match(r.stdout,/personal marker/);assert.ok(!r.stdout.includes(author));
+}));
+
+test('portable manifest rejects invalid object shape without disclosing content',()=>fixture((dir,git)=>{
+  writeFileSync(join(dir,'plugin.json'),'null');git('add','plugin.json');
+  const r=scan(dir);assert.equal(r.status,1);assert.match(r.stdout,/invalid manifest JSON/);
+}));
+
+test('public mode skips the internal folder and refuses links into it',()=>fixture((dir,git)=>{
+  const marker=['Machine','B'].join(' ');
+  const folder=['docs','internal'].join('/');
+  mkdirSync(join(dir,folder),{recursive:true});
+  writeFileSync(join(dir,folder,'record.md'),'Checked on '+marker+'\n');git('add',folder+'/record.md');
+  assert.equal(scan(dir).status,1);
+  const ok=scan(dir,'--public');assert.equal(ok.status,0,ok.stdout);assert.match(ok.stdout,/"files":0/);
+  writeFileSync(join(dir,'guide.md'),'See [the record]('+folder+'/record.md).\n');git('add','guide.md');
+  const r=scan(dir,'--public');assert.equal(r.status,1);assert.match(r.stdout,/guide.md:1: link to an internal document/);
+  writeFileSync(join(dir,'guide.md'),'Checked on '+marker+'\n');git('add','guide.md');
+  const m=scan(dir,'--public');assert.equal(m.status,1);assert.match(m.stdout,/guide.md:1: personal marker/);assert.ok(!m.stdout.includes(marker));
+}));
+// The guard on this repository itself: everything outside the internal folder must be fit to
+// publish at every commit, so a personal marker fails the suite the day it is written.
+test('the public part of this repository scans clean',()=>{
+  const root=fileURLToPath(new URL('..',import.meta.url));
+  const r=spawnSync(process.execPath,[scanner,'--index','--public'],{cwd:root,encoding:'utf8'});
+  assert.equal(r.status,0,r.stdout);
+});

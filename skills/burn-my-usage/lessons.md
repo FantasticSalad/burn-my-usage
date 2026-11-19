@@ -54,8 +54,8 @@ runs add theirs to `lessons.md` in the burn home, not here.
 - **Synced folders can roll back history too.** If the local default branch is behind and
   also has commits origin lacks (DIVERGED), don't build there.
 - **Windows:** heredocs, `sed -i` and `echo >` break on CRLF line endings and quoting. Write
-  files with the Write and Edit tools. Git Bash `date` may not know your time zone; trust
-  `start.sh`'s `LOCAL_TIME` line.
+  files with the Write and Edit tools. Git Bash `date` may print the wrong zone name; trust
+  the UTC offset in `start.sh`'s `LOCAL_TIME` line.
 - **Python projects with `uv`:** if pytest lives in an extra (`[project.optional-dependencies]
   dev`), run `uv run --extra dev pytest`, or it runs in a throwaway environment that can't see
   the project's dependencies, and every test fails with ModuleNotFoundError.
@@ -64,11 +64,6 @@ runs add theirs to `lessons.md` in the burn home, not here.
 
 ## Tooling
 
-- **Auto mode's classifier sometimes returns no verdict.** It's transient: retry once, then
-  do read-only work for a while. Smaller Edit payloads go through more often. Ten no-verdict
-  responses in a row end the turn, so after about six, work read-only until it recovers.
-- **Three refusals in a row pause auto mode** for a human. Never retry a refused action;
-  change course instead.
 - **Another session may be working at the same time,** even in the same repo. Re-read a file
   just before editing it, and stage by path, never `git add -A` in a repo you didn't start
   clean.

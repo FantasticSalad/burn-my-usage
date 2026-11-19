@@ -1,6 +1,7 @@
 # Design
 
-Contents: origin, components, compatibility, decisions and what's still open.
+Contents: origin, components, compatibility, decisions and what's still open. The detailed
+host contract is in [HOST-ARCHITECTURE.md](HOST-ARCHITECTURE.md).
 
 ## Origin
 
@@ -19,7 +20,8 @@ for its owner's operational integrations; this package is a configurable sibling
 
 ## Components
 
-SKILL.md defines setup, plan, run, inbox, status and stop. worktrees.md documents item
+SKILL.md selects a host adapter and the shared workflow for setup, plan, run, inbox, status
+and stop. worktrees.md documents item
 lifecycle. The scripts use bash 3.2, git and ordinary shell utilities. Optional GitHub
 features use gh; development replay/E2E utilities use Node 18+. Runtime state belongs in
 the user-selected burn home, never the install folder. A status-line copy there samples
@@ -28,13 +30,15 @@ only usage data and can chain the user's previous status line.
 The session-keyed guard enforces branch restrictions, staged leak checks, push policy,
 secret paths, protected configuration and selected outward commands. It is command-string
 mediation, not an adversarial sandbox. SECURITY.md documents indirection and other gaps.
-The manifest uses onFailure: block: a failed hook blocks ordinary sessions too.
+The Claude manifest uses onFailure: block: a failed hook blocks ordinary sessions too.
 
 ## Compatibility
 
-Claude Code 2.1.295+ on Linux, macOS or Windows with Git Bash. No Codex or claude.ai runtime
-support in this release. The skill's general wording does not establish equivalent hooks,
-usage pacing or continuation behavior on another host.
+The published runtime supports Claude Code 2.1.295+ on Linux, macOS or Windows with Git Bash.
+This development tree extracts the host-neutral workflow and adds an experimental Codex
+adapter. Native Codex discovery, hook behavior, quota collection and continuation are
+unverified and remain gates; claude.ai is unsupported. Shared instructions and offline
+tests do not establish equivalent runtime enforcement.
 
 ## Decisions
 
