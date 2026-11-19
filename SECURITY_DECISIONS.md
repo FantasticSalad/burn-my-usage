@@ -2,6 +2,25 @@
 
 The runtime and guard decision log remains in [SECURITY.md](SECURITY.md).
 
+## 2026-11-19: claim the run lock by creating its owner file, not by mkdir
+
+Problem: `start.sh` took the run lock with `mkdir run.lock`, relying on mkdir to fail when
+the folder already exists. Ubuntu 26.04 ships uutils coreutils, and its mkdir (0.10.0) can
+report success to both of two simultaneous calls: on the CI runner, 34 of 100 two-way races
+did. Two starts at the same moment then both ran, in one burn home, with their owner records
+written over each other. The runtime test caught it as six failures, the first three from
+the race and the rest from the second run's leftover marker.
+Options: require GNU coreutils; take the lock with a different command; or make the claim a
+file created with O_EXCL, which the kernel makes atomic whatever mkdir does.
+Decision: mkdir still makes the folder, but the claim is creating `run.lock/owner` with
+bash's noclobber, which opens it with O_EXCL (bash 3.2 does too). A start that finds the file
+already there reports OTHER_RUN_ACTIVE and removes nothing. If the file can't be written for
+another reason, the start removes the folder only while it is empty, so it can never take
+away another start's claim, and reports an error. Everything that reads the lock is unchanged.
+Verification: on the Ubuntu 26.04 runner every shell suite passes, including the race. A new
+case stands in a mkdir that never fails: it passes with the fix on Windows and Linux and
+fails on the old `start.sh` (4 failures). The full suite passes on Windows.
+
 ## 2026-11-19: macOS and Windows tests run on the default branch only in a private repository
 
 Problem: every push ran the suite on Linux, macOS and Windows. Hosted macOS and Windows

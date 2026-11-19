@@ -88,11 +88,23 @@ fi
 
 primary=${ids%%
 *}
-# mkdir is the atomic cross-provider claim. Never infer that an old claim is abandoned.
-if ! mkdir "$BMU_HOME/run.lock" 2>/dev/null; then
+# The cross-provider claim is creating run.lock/owner with noclobber, which opens the file
+# with O_EXCL: of two starts at the same moment, exactly one creates it. mkdir alone is not a
+# claim: uutils mkdir, Ubuntu's default from 26.04, can report success to both of two
+# simultaneous calls. Never infer that an old claim is abandoned.
+other_run() {
   owner=$(sed -n '2p' "$BMU_HOME/run.lock/owner" 2>/dev/null || true)
   echo "OTHER_RUN_ACTIVE= ${owner:-unknown}"
   exit 4
+}
+mkdir "$BMU_HOME/run.lock" 2>/dev/null || other_run
+if ! (set -C; printf '%s\n%s\n%s\n' "$BMU_HOST" "$primary" "$ids" >"$BMU_HOME/run.lock/owner") 2>/dev/null; then
+  [ ! -f "$BMU_HOME/run.lock/owner" ] || other_run
+  # Not a lost claim: the file couldn't be written. rmdir removes the folder only while it is
+  # empty, so it never takes away a claim another start has made.
+  rmdir "$BMU_HOME/run.lock" 2>/dev/null || true
+  echo "ERROR: could not write $(native_path "$BMU_HOME")/run.lock/owner; nothing was started" >&2
+  exit 1
 fi
 claimed=1
 markers=""
@@ -107,7 +119,6 @@ cleanup_failed_start() {
   rmdir "$BMU_HOME/run.lock" 2>/dev/null || true
 }
 trap cleanup_failed_start EXIT
-printf '%s\n%s\n%s\n' "$BMU_HOST" "$primary" "$ids" >"$BMU_HOME/run.lock/owner"
 # Existing legacy markers also block a new run; they may belong to an older version.
 existing=$(find "$BMU_HOME/active" -type f -print 2>/dev/null | head -n 1 || true)
 if [ -n "$existing" ]; then

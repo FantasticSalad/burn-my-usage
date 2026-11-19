@@ -1,6 +1,6 @@
 {
   "name": "burn-my-usage",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Experimental Codex package for review-ready repository work. Native unattended runtime acceptance is pending.",
   "hooks": "./hooks/codex.json"
 }

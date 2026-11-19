@@ -82,7 +82,7 @@ test('preflight rejects malformed hook selection even if hashes are regenerated'
 });
 
 test('preflight rejects mismatched compatibility metadata even with regenerated hashes', t => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'bmu-overlay-'));
+  const temp = fs.mkdtempSync(path.join(tmpRoot, 'bmu-overlay-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
   const dest = path.join(temp, 'candidate');
   assert.equal(run('prepare', dest).status, 0);
@@ -98,7 +98,7 @@ test('preflight rejects mismatched compatibility metadata even with regenerated 
 });
 
 test('preflight refuses an absent or altered Windows supervisor even with new hashes', t => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'bmu-windows-hook-'));
+  const temp = fs.mkdtempSync(path.join(tmpRoot, 'bmu-windows-hook-'));
   t.after(() => fs.rmSync(temp, {recursive:true,force:true}));
   const dest = path.join(temp, 'candidate');
   assert.equal(run('prepare', dest).status, 0);
